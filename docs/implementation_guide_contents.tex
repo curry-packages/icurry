@@ -1,0 +1,553 @@
+This document shall give as much help as possible to implement a new backend on top of the ICurry intermediate format.
+It includes descriptions for all necessary functions that make up a unoptimized and slow but still complete runtime system, a description on how to translate ICurry constructs and how to implement some of the more complex external functions.
+
+\section{Runtime System}
+
+The runtime system's purpose is to coordinate the execution of functions with respect to their laziness and non-determinism.
+It shall track all branches of computation, cycle through them to enable some form of concurrent evaluation and dispatch the correct functions.
+
+The runtime system is an implementation of \emph{The Fair Scheme}
+\ifdefined\isthesis
+\cite{fairscheme}.
+\else
+\footnote{Sergio Antoy and Andy Jost: Compiling a Functional Logic Language: The Fair Scheme. In: Logic-Based Program Synthesis and Transformation, 23rd International Symposium, LOPSTR 2013, Madrid, Spain, September 18-19, 2013, Revised Selected Papers. DOI 10.1007/978-3-319-14125-1\_12}.
+\fi
+It uses a queue of stacks, each representing a branch in the non-deterministic computation.
+
+In this document, we give an abstract API, which can hopefully serve as a guide on how this runtime system could be implemented in any language.
+We try to keep it language-agnostic, favoring (semi-)formal or informal descriptions over constructs which may be influenced by some programming languages being absent from others.
+
+\subsection{Data Structures}
+
+The complete program state is one big, directed graph.
+Many operations deal with a single node and its direct children, so the chosen data structure should allow to access this kind of information cheaply.
+There are no operations, which deal with all nodes or all edges at once, so a direct implementation of the usual mathematical definition of a graph using a set of vertices and a set of edges is not recommended.
+A faster approach would likely be to encode all outgoing edges directly into each node.
+While the number of children theoretically is not limited, a suitably high maximum number of children may be selected.
+This is reasonable as there will never be more children than the arity of a function or constructor.
+A number of arguments that high is not expected in any program.
+
+This section highlights the important parts of this graph and some structures which hold information used to correctly and efficiently transform this graph.
+
+\subsubsection{Node}
+
+A node provides the identity for a (sub-)term.
+This means that evaluating its represented term will not create a new node, but rather update this existing one.
+Hence, a node needs to be mutable.
+In addition to its children, it needs to encode a label.
+This label determines what kind of term this node represents.
+It can be one of the following:
+\begin{enumerate}
+	\item A failure.
+	\item A function call.
+	\item A constructor call.
+	\item A literal.
+	\item A choice.
+\end{enumerate}
+
+Function calls, constructor calls and literals also need to encode, which function or constructor is called or which literal is meant.
+For functions, this can be achieved by either adding a reference to the function, using a \emph{function pointer}, \emph{callable object} or similar mechanism, or by using a custom dispatcher and some function identifiers.
+Constructors need to include their type-unique identifier.
+If the node is labeled to contain a literal, this literal is to be included.
+Nodes containing a choice additionally need a mechanism to match multiple choice nodes representing the same choice.
+This will further be explained in section \ref{matching_choices}.
+
+The runtime system needs to be able to differentiate between a function call and a constructor.
+However, literals can be seen as a set of constructors and thus a differentiation between a constructor call and a literal is not strictly needed, but may be convenient in many places.
+
+\subsubsection{Edge}
+
+Edges need to encode a source and a target node.
+Also, edges are sorted as seen from the outgoing node.
+There are no labels or additional information.
+Thus, a useful representation for edges is to include a list of all child nodes into each node.
+
+\subsubsection{Matching Choices}
+\label{matching_choices}
+
+When doing a \emph{pull-tab} step in the presence of shared nodes, single nodes have their label copied.
+While this is not a problem for the other types of labels, it eventually causes all choice nodes to be copied into completely independent nodes.
+This manifests as a run-time choice semantic, which is not desired.
+The solution is to mark all copies of a choice as belonging together and to make the same decision for each of these nodes.
+
+A simple mechanism for doing this is to include an incrementing integer as \emph{choice identifier} into a choice-labeled node.
+This choice identifier is equal for all nodes representing the same choice and different between any two nodes belonging to different choices.
+However, it may be convenient to assign these identifiers lazily.
+By that we avoid having to pass a the mechanism for obtaining new identifiers to all parts of the program but rather lets a few functions in the runtime system deal with organizing these identifiers.
+%Furthermore, it slows down exhausting the pool of available choice identifiers by not having to assign one to a choice which will never be evaluated.
+Furthermore, lazy assignments reduce wasting identifiers on choices which will never be evaluated.
+These identifiers are often a finite resource, so avoiding waste is desirable.
+
+%TODO hint to more efficient matching mechanisms, eg in kics2?
+
+\subsubsection{Stack}
+\label{stack}
+
+The stack, or rather \emph{a} stack, is a classic stack over references to nodes.
+It is not necessary for correctly implementing the runtime system, as its information can staightforwardly be computed by walking the graph.
+However, it is one of the most important parts for making the runtime system efficient.
+
+\subsubsection{Map of Decisions}
+\label{modc}
+
+As hinted at in section \ref{matching_choices}, for nodes representing the same choice the same decision has to be made.
+Thus, we need to keep the information which way each choice was decided.
+If the matching is done using the proposed \emph{choice identifiers}, this information can be held as a set of $\{(c,n) \ | \ c \in \mathbb{N}, n \in \mathbb{N}\}$, where $c$ shall be the choice identifier and $n$ the position of the chosen child.
+Preferably, this data structure shall allow fast lookup by the \emph{choice id}, so a structure called \emph{map} in many languages is a good fit.
+
+\subsubsection{Queue}
+
+The queue, being the main component of a breadth-first search in the graph is the core mechanism to achieve computational completeness within non-deterministic programs.
+
+It shall contain pairs of a stack (see \ref{stack}) and a decision map (see \ref{modc}).
+As this structure is a queue, taking from one end and inserting at the other end should be fast.
+Other operations are not needed to implement the core of the runtime system.
+Some more advanced mechanisms like the \emph{concurrent and} (Curry: \texttt{(\&) :: Bool -> Bool -> Bool}) or encapsulated search may want to have finer control of the queue.
+However, this is currently not in the scope of this document.
+%TODO evaluate and document this
+
+\subsection{Memory Management}
+
+The runtime system constantly updates a graph by adding new nodes, creating links between existing nodes and breaking these links.
+As it does not define, when a node may be discarded, there needs to be a system that can detect whether a node is still in use or can be freed from memory.
+Simple reference counting is not enough for this task, as the graph is allowed to contain cycles which can be discarded at once, and there is no point where these cycles could be broken using weak references.
+
+Rather, a complete system for garbage collection is needed.
+If the target language itself relies on a garbage collector, it is wise to utilize this for our data structures.
+If the target language requires explicit memory management, a full garbage collector must to be implemented for nodes.
+It needs to be able to detect stale cycles and free them.
+
+\subsection{Procedures}
+
+Now we will give some procedures that form the runtime system when implemented as described.
+Depending on the target language, some of these are just different names for built-in functions dealing with data structures.
+
+
+All procedures are given as \texttt{name ::~arguments -> return-type}, with \texttt{argument} being a comma-separated list of argument definitions.
+An argument is given as \texttt{name:type}.
+A type can be one of the data structures described above, a base type such as \texttt{Int} or \texttt{Bool}, a tuple of two types, given as \texttt{(type1, type2)}, a list of a type, denoted as \texttt{[type]}, or a type with a hint that data shall be given by reference \texttt{type*}.
+
+Depending on the procedure, being marked as pass-by-reference has at least one of two implications for an argument or return value.
+Modifying the argument shall modify the whole state (sometimes called an \emph{out}-argument).
+Or some data shall be referenced from somewhere else (\emph{sharing}).
+Thus, all reference-marked types shall adhere to some reference-semantics.
+
+\emph{Not} being marked as reference, however, does not require passing by value.
+Those pieces of data may be passed by reference as well, if this holds out the prospect of faster execution.
+
+For brevity, the decision map will be abbreviated as \texttt{DM} in type signatures.
+
+\subsubsection{\texttt{updateNode ::~n:Node*, l:Label, c:[Node*] -> Void}}
+\label{updateNode}
+
+\texttt{updateNode} shall write the label \texttt{l} into the node \texttt{n}, disconnect all child nodes from \texttt{n} and then make all nodes in \texttt{c} children of \texttt{n}.
+%TODO assign c?
+
+\subsubsection{\texttt{push ::~s:Stack*, n:Node* -> Void}, \texttt{pop ::~s:Stack* -> Node*}, \texttt{peek ::~s:Stack* -> Node*}}
+
+\texttt{push}, \texttt{pop} and \texttt{peek} shall be standard stack operations.
+
+\subsubsection{\texttt{next ::~q:Queue* -> (Stack*, DM*)}, \texttt{enqueue ::~q:Queue*, (Stack*, DM*) -> Void}}
+
+\texttt{next} and \texttt{enqueue} shall return the next element at one end of a queue, while removing it from the queue, or respectively insert an element at the other end of a queue.
+
+\subsubsection{\texttt{ensureHasChoiceId ::~n:Node*}}
+
+\texttt{ensureHasChoiceId} uses a global supply of identifiers to assign one to a \emph{choice}-labeled node, if this node does not yet have an identifier.
+
+\noindent
+It does not need to check if the passed node is a choice, as it will only be called on choices.
+It shall execute the following:
+
+\begin{algorithm}[H]
+\If {$n.choice\_id \texttt{ is } {<}unset{>}$}{
+	$n.choice\_id \gets nextId$\;
+	$nextId \gets nextId + 1$\;
+}
+\end{algorithm}
+
+\subsubsection{\texttt{pull ::~n:Node*, p:Int -> Void}}
+\label{pull}
+
+\texttt{pull} executes a \emph{pull-tab} step.
+This is an operation that pulls a choice towards the root of an expression.
+Instead of passing the choice-labeled node to this procedure, its arguments are a parent node and a position \texttt{p}.
+A node can be referenced from multiple positions, so a position is strictly required to correctly determine, over which edge this pull-tab step shall be executed over.
+
+\noindent
+\texttt{pull} shall execute the following:
+
+\begin{algorithm}[H]
+$s \gets n.label$\;
+$cs \gets n.children$\;
+$c \gets cs[p]$\;
+$ensureHasChoiceId(c)$\;
+$cid \gets c.choice\_id$\;
+$n.label \gets {<}choice{>}$\;
+$n.choice\_id \gets cid$\;
+$n.children \gets []$\;
+\ForAll {$i\gets c.children$}{
+	$n' \gets \textbf{new } Node$\;
+	$n'.label \gets s$\;
+	$n'.children \gets \textbf{copy of } cs$\;
+	$n'.children[p] \gets i$\;
+	$n.children \gets n.children ++ [n']$\;
+}
+\end{algorithm}
+
+\subsubsection{\texttt{step ::~s:Stack* -> Bool}}
+\label{step}
+
+\texttt{step} does a single step towards the \emph{Head Normal Form}.
+
+\noindent
+It shall execute the following:
+
+\begin{algorithm}[H]
+$n \gets pop(s)$\;
+\If {$n.label \textbf{ is } constructor \textbf{ or } n.label \textbf{ is } literal$}{
+	\Return $|s| > 0$;
+}
+\If {$n.label \textbf{ is } {<}fail{>}$}{
+	\Return \textbf{False}\;
+}
+\If {$n.label \textbf{ is } function$}{
+	$f \gets n.label$\;
+	$r \gets f(n)$\;
+	\If {$r \textbf{ is } {<}no\_argument\_needed{>}$}{
+		$push(s,n)$\;
+		\Return \textbf{True}\;
+	}
+	\If {$n.children[r] \textbf{ is } {<}choice{>}$}{
+		$pull(n,r)$\;
+		$push(s,n)$\;
+	}
+	\If {$n.children[r] \textbf{ is } function$}{
+		$push(s,n)$\;
+		$push(s,n.children[r])$\;
+	}
+	\Return \textbf{True}\;
+}
+\If {$n.label \textbf{ is } {<}choice{>}$}{
+	\Return \textbf{True}\;
+}
+\Return \textbf{False}\;
+\end{algorithm}
+
+\texttt{step}'s return value indicates whether the runtime system shall enqueue this nondeterministic branch again.
+A return value of \texttt{False} shows that this branch requires the head-normal form of a node that is a failure, and thus is a failure itself.
+
+\iffalse
+It shall pop a node from the stack.
+\begin{itemize}
+	\item If this node is a constructor or literal, return whether the stack is non-empty.
+	\item If this node is a failure, return \texttt{False}.
+	\item If this node is a function call, call the referenced function and pass this node.
+	If the return code of this function shows, that no argument must be evaluated first, return \texttt{True}
+	If the return code indicates, that an argument must be evaluated first, this argument shall be examined.
+	If it is a choice, \texttt{pull} (see \ref{pull}) shall execute a pull-tab step with our original node and the position of the required argument.
+	Then return True.
+\end{itemize}
+\fi
+
+\subsubsection{\texttt{dispatch ::~q:Queue* -> Void}}
+\label{dispatch}
+
+\texttt{dispatch} is the main procedure coordinating the execution.
+
+\noindent
+It shall execute the following:
+
+\begin{algorithm}[H]
+$(s,m) \gets next(q)$\;
+$n \gets peek(s)$\;
+\If {$n.label \textbf{ is } {<}choice{>} \textbf{ and } |s| = 1$}{
+	$ensureHasChoiceId(n)$\;
+	$b \gets m[n.choice\_id]$\;
+	\If {$b \textbf{ is } {<}not\_found{>}$}{
+		\For {$(i,n') \gets \textbf{zip}([0..],n.children)$}{
+			$m' \gets \textbf{copy of } m$\;
+			$m'[n.choice\_id] \gets i$\;
+			$s' \gets \textbf{new } Stack$\;
+			$push(s', n')$\;
+			$enqueue(q,(s',m'))$\;
+		}
+	}
+	\Else{
+		$updateNode(n, n.children[b])$\;
+		$enqueue(q,(s,m))$\;
+	}
+}
+\Else{
+	$r \gets step(s)$\;
+	\If {$r$}{
+		$enqueue(q,(s,m))$\;
+	}
+}
+\end{algorithm}
+
+\iffalse
+It shall take the next element from the queue and examine the stack:
+
+If the stack contains a single node, and this node is labeled as a choice this choice will be split up into multiple branches.
+To do this, the decisions map that has been taken form the queue and the \texttt{peek}ed node's choice identifier is used to check, if this choice has already been decided.
+If the choice does not yet have an identifier, a new one shall be assigned.
+\begin{itemize}
+	\item If the choice has already been decided to evaluate to the $i$-th branch, \texttt{updateNode} (see \ref{updateNode}) with the node and the contents of the $i$-th child of the choice shall directly select the correct branch.
+	Then the stack and the decision map are enqueued again.
+	\item If the choice has not already been decided, the decision map shall be copied for each branch of this choice.
+	Each of these copies shall tell, that this choice has been decided by selecting the respective branch.
+	Then, each of the children shall be pushed onto a new, empty stack and enqueued together with its map.
+\end{itemize}
+In the second case the choice node is deconstructed and not enqueued again.
+Still it must be assigned an identifier, as it can still be in use through recursive structures.
+
+If the stack constains more than a single node or this single node is not labeled to be a choice, \texttt{step} (see \ref{step}) shall be called on this stack.
+If \texttt{step} returns \texttt{True}, the stack and the decision map shall be enqueued again.
+\fi
+
+\subsubsection{\texttt{run ::~q:Queue* -> Void}}
+
+\texttt{run} shall repeatedly call \texttt{dispatch} (see \ref{dispatch}) as long as the queue is non-empty:
+
+\begin{algorithm}[H]
+\While {$|q| > 0$}{
+	$dispatch(q)$\;
+}
+\end{algorithm}
+
+\section{The Backend}
+
+Most of the work necessary for translating a Curry program to a new target language is already done by the \emph{curry-frontend} and the transformations from the \emph{icurry} package.
+The emitted \emph{ICurry} format is designed to be structured imperatively and shall enable a sufficiently easy translation to the desired target language by requiring only slightly more logic than what is needed for a pretty printer.
+Furthermore, the \emph{Extended ICurry} format executes some more transformations on top of the \emph{ICurry} representation, which only make implementing the actual backend a little more straightforward.
+
+\subsection{(Extended) ICurry Structure}
+
+An (Extended) ICurry program consists of four parts: a module name, a list of imported modules, a list of declared data types and a list of declared functions.
+
+Apart from the module name, all these pieces of information should be needed to emit a complete program.
+The module name, however, may be required for some target languages to help naming the module or single functions.
+
+The import list is a comprehensive list of all modules used in this module.
+Every function or datatype that is referenced in this module is defined either in this module or in one of the modules in this list.
+Still, this list may contain unused modules, as there is currently no mechanism to prune imported but unused modules.
+
+
+\subsection{Data Types}
+
+Data type declarations have a name, a number of type variables and a number of constructors.
+Every data type shall be compiled into a generator function.
+
+A generator function looks just like any other function and it is used exactly the same.
+Its arguments arise from the data type's type arguments.
+They are used to parameterize this generator by passing an appropriate generator for every type argument.
+
+The generator never requires the head-normal form of any argument.
+It shall only set its node to a choice.
+This choice shall contain one constructor call for every constructor of this type.
+The constructors' arguments are determined as follows:
+
+If a type variable is referenced in the constructor's signature, a function call to the \texttt{Prelude.unshare} function, with the variable as only argument, shall be passed.
+\texttt{unshare} will be explained in section \ref{unshare}.
+If a type constructor is given instead, a function call to this data type's generator is inserted.
+Its arguments are found by doing this recursively.
+
+%\todo{example}
+
+\subsection{Functions}
+
+A function is either compiled or defined externally.
+If a function is defined externally, the external implementation shall be called and no further action is necessary.
+
+Translating a function body is the more interesting case.
+All specified arguments shall be unpacked from the node the function operates on.
+Names for variables in the target program can directly be derived from each \texttt{IVarIndex}, for example by converting the index to a string and prepending a letter.
+They are meant to be sufficiently unique.
+
+Then, the block defines the actual logic happening in the function.
+All blocks carry a number of local variables and a number of assignments.
+Before dealing with the logic specific to each different block, all these local variables shall be declared and defined to an empty node.
+This is needed because these new variables can be used before they are assigned, for example to allow cyclic data structures.
+Then it shall process each assignment by assigning the structure arising from the given expression to the given variable.
+
+A simple block shall now set the contents of the current node to the graph structure constructed from the expression.
+
+A case block shall examine the specified variable.
+If it is not in head-normal form, the function aborts by returning the position of this variable in the function's argument list.
+The variable is guaranteed to always be a function argument.
+If it is in head-normal form, it shall find the correct branch based on the constructor in this variable.
+Then it shall process the block given in this branch.
+
+For a case differentiation over literals it may happen that no branch matches.
+In this case the node shall be set to a failure.
+
+For a differentiation over constructors of a data type, this can never happen.
+All cases resulting in a failure are given explicitly.
+As constructors can have arguments, these must be unpacked to the variables by their position just like function arguments, before the block specified in this branch is processed.
+
+Evaluating expressions builds a subgraph.
+\texttt{ILit}, \texttt{IFCall}, \texttt{ICCall} and \texttt{IOr} (respectively their \texttt{IE}-counterparts) generate new nodes labeled accordingly.
+\texttt{IVar} (respectively \texttt{IEVar}) just gives an existing node which is referenced by a variable.
+
+
+\section{Input/Output}
+
+As the described method of evaluation is lazy, the order of evaluation of every subterm is not set by the order of their appearance in the source program.
+While this is not a problem for pure functions, IO requires the ability to specify the order of execution.
+This is solved using the \texttt{IO} monad, which enforces every action to be executed in order.
+To do this, an implicit \emph{world} object is passed between IO actions that are being executed.
+This world could be seen as actually containing all data for input and output, allowing to see IO actions as pure functions for theoretical arguments.
+In practice, however, this world object contains much less, nothing in fact.
+It is a mere dummy for guarding the access to the actual world (the user, file system, network, etc.) and hence, can be represented by the smallest applicable type.
+
+An action in the source language with type \texttt{IO a} can be implemented as a function \texttt{() -> (a,())}, with the world being represented through a unit type.
+It is important to only execute the action and produce a result, once the world argument actually is evaluated to head-normal form.
+This small detail ensures the correct evaluation order.
+
+As IO actions are composed using \texttt{Prelude.>{}>=\$ :: IO a -> (a -> IO b) -> IO b}, this function has to properly pass the world between the two actions.
+A usual implementation would be to pass the world to the first action, wait for its evaluation to head-normal form, extract the world from the action's result, pass this world to the second action and then make this second action's result the whole result.
+
+Although at first glance this may look like an additional translation step, all basic IO actions are defined as external functions and thus are not translated at all.
+IO actions defined in the source program are always composed from these basic actions using the previously explained bind operator, which takes care of handling the world.
+
+\subsection{\texttt{catch} and the World}
+
+In practice, IO actions can throw errors.
+In the source language, these errors have to be handled using the function \texttt{catch :: IO a -> (IOError -> IO a) -> IO a}.
+To properly allow this, it may be customary to have the world slightly more complex than the unit type.
+An equivalent of \texttt{data IOWorld = WorldOK | WorldError IOError} allows carrying an additional error.
+
+\texttt{>{}>=\$} then has to immediately return this error when receiving a \texttt{WorldError} from the first action.
+\texttt{catch} basically does the opposite of \texttt{>{}>=\$}:
+It immediately returns if no error is seen and prepares and starts the second action (the error handler) if it receives an error from the action.
+
+\subsection{Starting an IO Action}
+
+Starting an IO action is required if the main function is an IO action or when invoking \texttt{unsafePerformIO}.
+Then, the action shall be copied, this copy shall receive a fresh world object and afterwards it can be assigned to a node, ready to be evaluated.
+In the case of \texttt{unsafePerformIO}, the action may not be directly assigned to the node that previously contained the call to this unsafe function.
+Instead it must be wrapped in another function that will extract the actual result from the world structure.
+Copying the action is necessary, as an action may be shared and every call needs to attach its own world object.
+Modifying the shared action duplicates a world and thus loses the enforcement of evaluation order.
+
+\section{External Functions}
+
+Many functions that need a native implementation in the target language are not very complex.
+Just by looking at their signature and maybe their documentation, one should be able to immediately have an idea how to implement them.
+
+As there are many externally defined functions in the \emph{curry-base}, this section will only focus on a few more complicated functions.
+
+Most externally defined functions do not need to handle unevaluated nodes.
+Small stubs in the curry libraries ensure that these external implementations are only called on nodes which have already been evaluated to (head-)normal form.
+
+\subsection{\texttt{Prelude.unshare ::~a -> a}}
+\label{unshare}
+
+\texttt{unshare} is the only function added by the translation to \emph{ICurry}.
+As there is no external documentation for this function, it is included in this document.
+
+Its purpose is to separate a choice node from all other nodes with its choice identity.
+This is necessary to enable proper semantics for choices in the presence of generators.
+Without splitting the identities between a passed generator and its use, non-deterministic branches between \emph{different} free variables would be shared.
+Splitting these identities reduces these sharings to exactly those expected by call-time semantics.
+
+Usually, \texttt{unshare} will create a shallow copy of the node which is the only argument that \texttt{unshare} is called on.
+The copy will reference the same nodes as children and no children are changed or copied.
+\texttt{unshare} will reset the copy's choice tag (see \ref{matching_choices}), so it will be given a new one on occasion.
+This copy is the result of this function.
+
+\subsection{\texttt{Prelude.apply ::~(a -> b) -> a -> b } and similar}
+
+\texttt{apply} looks like the identity function on a functional type.
+It is used, however, to construct a (potentially partial) function/constructor call from a partial function/constructor call and an argument.
+
+The partial application needs to be copied to a new node.
+This new node can now be modified by adding a new child reference to the new argument.
+Copying is necessary, as a partial application may be used multiple times with different arguments, so the original partial application must be preserved.
+
+Several other functions use (partial) applications in their mechanism (for example \texttt{\$!}, \texttt{\$\#}).
+They can either use the \texttt{apply} function or just replicate this process in place.
+
+\subsection{\texttt{(Prelude.=:=) ::~a -> a -> Bool}}
+
+\texttt{(=:=)} does a few things at the same time.
+Not only does it compare two data terms, but it also takes shortcuts by binding free variables and thus avoids lots of useless work.
+
+The comparison recursively descends both arguments.
+This, however, may not be done strictly in the function body of \texttt{(=:=)}, as one of the data terms may be infinite or may contain unevaluated nodes.
+Strictly evaluating an inifinite structure would lead to an infinite computation in this function.
+This would immediately break the completeness of the Fair Scheme.
+An unevaluated node cannot be compared but must be evaluated first.
+Since a function can only request to evaluate those nodes which are function arguments, this would be a problem.
+
+Instead, this function only compares both data terms' constructors, failing on inequality, and then returns a new subgraph, which represents the conjunction of the structural equalities of each argument.
+This conjunction shall preferably be realized with a mechanism like the one used in the function \texttt{\&}, so the comparison is more like a breadth-first search than a depth-first search.
+
+Binding a free variable is unique to this function.
+If one of this function's arguments is a generator, the generator's node can unconditionally be updated so that it bears the same label and children as the other argument.
+This requires the ability to distinguish a simple \emph{choice} from a \emph{generator}, as generators are choices as well.
+In this, generators are special choices and could (only for use in this function) be marked to be suitable for unification.
+
+\subsection{\texttt{(Prelude.\$!!) ::~(a -> b) -> a -> b} and \texttt{toNF :: ~a -> a}}
+
+\texttt{(\$!!)} evaluates the argument to normal form before passing it to the function.
+This can easily be implemented by using a helper function \texttt{toNF}, which is not part of a Curry library.
+\texttt{f \$!!~x} then only has to request the evaluation of \texttt{toNF x} to head-normal form, which can easily be achieved by passing this term as an argument to a helper function, which then can request the evaluation to head-normal form.
+
+\texttt{toNF} then has to ensure that it only ever produces a head-normal form, if the result is also in normal form.
+This is achieved by recursively using this function and waiting for \emph{all} arguments to be processed before constructing the result.
+In other words, this function can be seen to emulate a strict identity function in a lazy runtime system.
+
+\subsection{\texttt{Prelude.readFile ::~String -> IO String}}
+
+While \texttt{writeFile} is easy to implement, because it only receives completely evaluated arguments and may do all the work in a single go, \texttt{readFile} should read lazily.
+
+This can be done by obtaining a handle from opening the file, and then returning an applied function call to a \texttt{read :: Handle -> String} function as IO result.
+This is still a correct implementation, as the mechanism of sharing avoids trying to read the same position multiple times, although the function modifies the handle and, thus, is not purely functional.
+\texttt{read} then can be implemented as the equivalent of
+
+\begin{algorithm}[H]
+\If {$handle \ is \ eof$}{
+	$close \ handle$\;
+	\Return []\;
+}
+\Else{
+	$c \gets readChar \ handle$\;
+	\Return $c : read \ handle$\;
+}
+\end{algorithm}
+
+\noindent
+$close$ and $readChar$ denote the native functions to close a file handle and to get the next character from an open file handle.
+
+\subsection{The \texttt{Global} Module}
+
+The module \texttt{Global} allows to define and allow constructs that behave like global variables in imperative languages.
+While their usage is safe as reading and writing are performed in IO actions, global variables are defined using the pure function \texttt{global}.
+This is a problem, because global definitions are never shared in Curry
+\ifdefined\isthesis
+\cite{curryreport}.
+\else
+\footnote{Michael Hanus (ed.): Curry: An Integrated Functional Logic Language (Vers. 0.9.0). 2016. Available at \url{http://www.curry-language.org}, last accessed: 2018-09-16}.
+\fi
+No naive implementation will allow effective writing to a global variable, as a new instance is created everytime the global variable is referenced, which makes it impossible to read a modified value.
+Also there is no argument which would allow the \texttt{global} function to distinguish between different global variables.
+
+To solve this, the translation can introduce a special handling for functions which are a mere call to the \texttt{global} function.
+These functions shall not be translated to a single function, but rather into two parts.
+The first part is an explicit subgraph containing the starting value (or data read from persistent storage), saved in the equivalent of a global variable.
+The second part is a function which simply returns a reference to this global structure.
+
+This way, every reference to the global variable's definition will eventually be evaluated to the same structure in memory.
+A write to this variable can then be reflected in later reads from this global variable.
+
+\subsection{\texttt{IO.Handle}}
+
+The \texttt{IO} module defines a data type \texttt{Handle}.
+It also introduces functions to access files and file-like objects making use of this data type.
+
+Other modules, especially the \texttt{Socket} module, however, also use handles.
+Consequently the \texttt{IO} functions working on a \texttt{Handle} not only need to be able to access files, but also other resources which may require different low-level interfaces.
+Thus, the \texttt{Handle} likely needs a mechanism to dispatch the correct functions for dealing with a handle at runtime.
+

@@ -1,0 +1,13 @@
+*~
+.cpm
+.curry
+src/Main/ConfigPackage.curry
+build.ninja
+.ninja_deps
+.ninja_log
+/build
+*.aux
+*.log
+*.pdf
+*.synctex.gz
+*.toc
