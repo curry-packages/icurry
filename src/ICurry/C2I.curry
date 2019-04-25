@@ -437,9 +437,9 @@ e2i ms tm ng v fargs caseE@(ACase ty t e bs) =
   let
     (e', vs', as', fs', ng') = e2i ms tm ng v fargs e
     (nv, vs'', as'') = case e' of
-                            IVar idx  -> (idx, vs', [])
-                            otherwise -> let nv = newVar (v ++ allVars caseE)
-                                         in (nv, vs'++[nv], as' ++ [(nv, e')])
+                          IVar idx  -> (idx, vs', [])
+                          _         -> let nv = newVar (v ++ allVars caseE)
+                                       in (nv, vs'++[nv], as' ++ [(nv, e')])
     (ng'', ng''') = extendName ng'
     (f@(fname,_,_,_,_),vs) = lambdaLift ms tm ng''' (ACase ty t (AVar ty nv) bs)
   in

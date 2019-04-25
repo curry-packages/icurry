@@ -59,6 +59,6 @@ pmain args = do
 optDescrs :: [OptDescr (String, Bool)]
 optDescrs = [
   Option "i" [] (ReqArg (\x-> (x,True)) "DIR")
-                "Look for imported modules here, using .curry-Directory",
+                "Look for imported modules here, using .curry directory",
   Option "I" [] (ReqArg (\x-> (x,False)) "DIR")
                 "Look for imported modules here"]

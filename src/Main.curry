@@ -38,7 +38,7 @@ usage = do
     , "  outfile        the ICurry output file"
     , ""
     , "Compile ICurry to Extended ICurry:"
-    , pn ++ " compile [-i includeDir] infile outfile"
+    , pn ++ " i2e [-I includeDir] infile outfile"
     , "  -I includeDir  specify a directory to look for included modules"
     , "  infile         the ICurry input file"
     , "  outfile        the Extended ICurry output file"]
