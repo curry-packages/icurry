@@ -48,7 +48,10 @@ pmain args = do
       rawRes <- lookupTypeDepsFileRaw rawPaths modname
       filename <- maybe (do
           cres <- lookupTypeDepsFile curryStylePaths modname
-          maybe (error "Cannot find ICurry type dependencies file") return cres)
+          maybe (error $ "Cannot find ICurry type dependencies file of " ++
+                         modname)
+                return
+                cres)
         return rawRes
       readFile filename >>= return . read
 
