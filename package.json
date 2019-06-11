@@ -2,6 +2,7 @@
     "name": "icurry",
     "version": "2.0.0",
     "author": "Marc Andre Wittorf <stu114055@mail.uni-kiel.de>",
+    "maintainer": "Michael Hanus <mh@informatik.uni-kiel.de>",
     "synopsis": "Generic intermediate format for compiling Curry to imperative languages",
     "category": [ "Metaprogramming" ],
     "license": "BSD-3-Clause",
@@ -14,8 +15,8 @@
         "ninja"              : ">= 1.0.0"
     },
     "compilerCompatibility": {
-        "pakcs": ">= 2.0.0",
-        "kics2": ">= 2.0.0"
+        "kics2": ">= 2.0.0, < 3.0.0",
+        "pakcs": ">= 2.0.0, < 3.0.0"
     },
     "exportedModules": [ "ICurry.Types", "ICurry.Files", "ICurry.Pretty",
                          "ICurry.C2I", "ICurry.Build",

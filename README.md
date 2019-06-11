@@ -50,7 +50,7 @@ the file `Prelude.curry` and invoke the following commands:
        > kics2-frontend -i "." --typed-flat Prelude
 
 2. Generate `Prelude.icy` (the ICurry representation of the Prelude,
-   which also generates the ICuury type dependency file `Prelude.ictdeps`):
+   which also generates the ICurry type dependency file `Prelude.ictdeps`):
 
        > icurry f2i -I ".curry" .curry/Prelude.tfcy .curry/Prelude.icy
 
