@@ -1,4 +1,4 @@
---- Types for representing ICurry programs
+--- Types for representing Extended ICurry programs
 --- @author Marc Andre Wittorf
 module ICurry.Extended.Types where
 

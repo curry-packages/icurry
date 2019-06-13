@@ -17,7 +17,7 @@ Assumption:
    (in `.curry/Rev.tfcy`) and the prelude (if PAKCS is used,
    replace `kics2` by `pakcs`):
 
-       > $CURRYHOME/bin/kics2-frontend -i $CURRYHOME/lib --typed-flat Rev
+       > $CURRYHOME/bin/kics2-frontend --extended -i $CURRYHOME/lib --typed-flat Rev
    
 2. Generate `Prelude.icy` (the ICurry representation of the Prelude,
    which also generates the ICurry type dependency file `Prelude.ictdeps`):
@@ -31,6 +31,11 @@ Assumption:
    For instance, to compile module `Rev` in this directory:
 
        > icurry f2i -I .curry -I $CURRYHOME/lib/.curry .curry/Rev.tfcy .curry/Rev.icy
+
+   With the additional option `-p`, the a pretty-printed version of the
+   generated ICurry program is shown on the terminal:
+
+       > icurry f2i -p -I .curry -I $CURRYHOME/lib/.curry .curry/Rev.tfcy .curry/Rev.icy
 
 4. If desired, generate the Extended ICurry representation of `Rev`
    (in `.curry/Rev.eicy`):

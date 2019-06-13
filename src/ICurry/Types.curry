@@ -154,12 +154,22 @@ data IExpr
       [IExpr]         -- the possibilities
   deriving (Show, Read)
 
--- This is not part of ICurry format
--- It is needed to convert Typed FlatCurry to ICurry
---- A mapping from functions to its signature and a number of type variables it
---- needs to be completely defined
+------------------------------------------------------------------------------
+-- This is not part of the ICurry format.
+-- It is needed to convert Typed FlatCurry to ICurry where
+-- type information about imported modules is required.
+
+--- A mapping from qualified function names to its signature and
+--- a list of type variables it needs to be completely defined.
+--- The type variables occur in the types of free variables used
+--- in the function definition. Most implementations require
+--- generators for logic variables. If these variables have
+--- polymorphic types, generators must be passed as additional
+--- arguments to implement such functions.
 type NeededMapping = (
       QName,           -- a function's name
         (TypeExpr,     -- the function's signature
-         [TVarIndex])) -- type variables (relating to the signature) which must
-                       -- be specified
+         [TVarIndex])) -- type variables (from the signature) for which
+                       -- generators are required
+
+------------------------------------------------------------------------------

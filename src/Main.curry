@@ -34,6 +34,7 @@ usage = do
     , "                 .curry subdirectory"
     , "  -I includeDir  specify a directory to look for ictdeps files in this"
     , "                 subdirectory"
+    , "  -p             show pretty-printed ICurry program"
     , "  infile         the Typed FlatCurry input file"
     , "  outfile        the ICurry output file"
     , ""

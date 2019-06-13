@@ -21,8 +21,7 @@ pmain args = do
      else do
       let infile  = files !! 0
       let outfile = files !! 1
-      fileContents <- readFile infile
-      let icy@(IProg modname deps _ _) = read fileContents
+      icy@(IProg modname deps _ _) <- readICurryFile infile
       let libdirs = libdirs' ++ [moduleRoot modname infile]
       depInfo <- mapM ((liftIO extractDepInfoFromI) .
                       (readICurryRaw libdirs))

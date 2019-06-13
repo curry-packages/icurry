@@ -3,6 +3,10 @@
 
 module ICurry.Files where
 
+import Directory     ( doesFileExist )
+import ReadShowTerm  ( readUnqualifiedTerm ) -- for faster reading
+import System
+
 import ICurry.Types
 import FlatCurry.Types
 import FlatCurry.Annotated.Types
@@ -15,12 +19,10 @@ import Distribution
 import System.CurryPath
 import System.FrontendExec
 
-import System
-import Unsafe
 
 --- Default search paths (obtained from CURRYPATH environment variable)
-defaultPaths :: [String]
-defaultPaths = unsafePerformIO $ do
+defaultPaths :: IO [String]
+defaultPaths = do
   currypath <- getEnviron "CURRYPATH"
   return $ if null currypath
               then []
@@ -200,22 +202,6 @@ getPathForModule paths modname = do
       path = joinPath $ pathParts ++ currySubdir : modIds
   return path
 
---- Read a FlatCurry file. Error if not found
---- @param paths   the search paths
---- @param modname the module name
---- @return        the source file's abstract representation
-readFlat :: [String] -> String -> IO (AProg TypeExpr)
-readFlat paths modname = do
-  fname <- getFlatFile paths modname
-  contents <- readFile fname
-  workaround (inferProg (read contents)
-              >>= either
-                    (\e -> putStrLn ("Error during FlatCurry type \
-                                      \inference:\n" ++ e)
-                           >> exitWith 1)
-                    return)
-             (return $ read contents)
-
 --- Read a Type Dependency file. Error if not found
 --- @param paths   the search paths
 --- @param modname the module name
@@ -224,27 +210,45 @@ readTypeDeps :: [String] -> String -> IO [NeededMapping]
 readTypeDeps paths modname = do
   fname <- getTypeDepsFile paths modname
   contents <- readFile fname
-  return $ read contents
+  -- ...with generated Read class instances (slow!):
+  -- return $ read contents
+  -- ...with built-in generic read operation (faster):
+  return (readUnqualifiedTerm ["ICurry.Types", "FlatCurry.Types",
+                               "Prelude"]
+                              contents)
 
 --- Read an ICurry file. Error if not found
 --- @param paths   the search paths
 --- @param modname the module name
 --- @return        the ICurry abstract representation
-readICurry :: [String] -> String -> IO (IProg)
-readICurry paths modname = do
-  fname <- getICurryFile paths modname
-  contents <- readFile fname
-  return $ read contents
+readICurry :: [String] -> String -> IO IProg
+readICurry paths modname =
+  getICurryFile paths modname >>= readICurryFile
 
 --- Read an ICurry file. Don't append .curry subdir. Error if not found
 --- @param paths   the search paths
 --- @param modname the module name
 --- @return        the ICurry abstract representation
-readICurryRaw :: [String] -> String -> IO (IProg)
-readICurryRaw paths modname = do
-  fname <- getICurryFileRaw paths modname
-  contents <- readFile fname
-  return $ read contents
+readICurryRaw :: [String] -> String -> IO IProg
+readICurryRaw paths modname =
+  getICurryFileRaw paths modname >>= readICurryFile
+
+--- Reads a file containing an ICurry term.
+--- @param filename   the file name
+--- @return           the ICurry abstract representation
+readICurryFile :: String -> IO IProg
+readICurryFile filename = do
+  exfile <- doesFileExist filename
+  if exfile
+   then do contents <- readFile filename
+           -- ...with generated Read class instances (slow!):
+           -- return (read contents)
+           -- ...with built-in generic read operation (faster):
+           return (readUnqualifiedTerm ["ICurry.Types", "FlatCurry.Types",
+                                        "Prelude"]
+                                       contents)
+   else error $ "EXISTENCE ERROR: ICurry file '" ++ filename ++
+                "' does not exist"
 
 --- Write a Type Dependency file. Find target directory based on source file
 --- @param paths   the search paths
