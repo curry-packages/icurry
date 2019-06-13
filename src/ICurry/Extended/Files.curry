@@ -3,6 +3,7 @@
 
 module ICurry.Extended.Files where
 
+import Directory    ( doesFileExist )
 import FileGoodies
 import FilePath
 import ReadShowTerm ( readUnqualifiedTerm ) -- for faster reading

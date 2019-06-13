@@ -66,7 +66,8 @@ pmain args = do
                                  "Prelude"]
                                 contents)
 
-
+------------------------------------------------------------------------------
+--- Options for the f2i compiler.
 data F2IOptions = F2IOptions
   { curryLibDirs  :: [String]
   , libDirs       :: [String]
@@ -94,3 +95,4 @@ usageText :: String
 usageText =
   usageInfo ("Usage: icurry f2i [options] <infile> <outfile>\n") f2ioptDescrs
 
+------------------------------------------------------------------------------
