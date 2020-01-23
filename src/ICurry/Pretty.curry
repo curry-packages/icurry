@@ -1,7 +1,13 @@
---- Pretty print ICurry programs
---- @author Marc Andre Wittorf
+------------------------------------------------------------------------------
+--- This module contains a pretty printer for ICurry programs.
+---
+--- @author Marc Andre Wittorf and Michael Hanus
+--- @version January 2020
+------------------------------------------------------------------------------
 
 module ICurry.Pretty where
+
+import List ( intersperse )
 
 import ICurry.Types
 import Text.Pretty
@@ -13,7 +19,7 @@ ppIProg :: IProg -> Doc
 ppIProg (IProg name imports types funcs) = vsepBlank
   [ ppHeader name
   , ppImports imports
-  , ppTypes types
+  , ppDataTypes types
   , ppFunctions funcs
   ]
 
@@ -38,29 +44,27 @@ ppImport name = text "import" <+> text name
 --- Pretty print ICurry types
 --- @param dts the data type declarations
 --- @return    the pretty printed types
-ppTypes :: [IDataType] -> Doc
-ppTypes = vsepBlank . map ppType
+ppDataTypes :: [IDataType] -> Doc
+ppDataTypes = vsepBlank . map ppDataType
 
 --- Pretty print an ICurry type
 --- @param dt the data type declaration
 --- @return   the pretty printed type
-ppType :: IDataType -> Doc
-ppType (name, _, tvs, cs) = nest 1 $
-  text "data" <+> ppQName name <+> ppTVars tvs $$ ppConstructors cs
+ppDataType :: IDataType -> Doc
+ppDataType (IDataType name cs) = nest 1 $
+  text "data" <+> ppQName name <+> equals <+> ppConstructors cs
 
 --- Pretty print ICurry constructors
 --- @param cs the data constructors
 --- @return   the pretty printed constructors
-ppConstructors :: [IConstructor] -> Doc
-ppConstructors cs = vsep $ zipWith (<+>) (equals : repeat bar)
-                                         (map ppConstructor cs)
+ppConstructors :: [(IQName,IArity)] -> Doc
+ppConstructors cs = hsep $ intersperse bar (map ppConstructor cs)
 
 --- Pretty print an ICurry constructor
 --- @param c the data constructor
 --- @return  the pretty printed constructor
-ppConstructor :: IConstructor -> Doc
-ppConstructor (IConstructor name _ es) = hsep $
-  ppQName name : map (ppTExpr 'a') es
+ppConstructor :: (IQName,IArity) -> Doc
+ppConstructor (name,ar) = ppQName name <+> char '/' <+> int ar
 
 --- Pretty print ICurry functions
 --- @param fns the functions
@@ -72,28 +76,20 @@ ppFunctions = vsepBlank . map ppFunction
 --- @param fns the function
 --- @return    the pretty printed function
 ppFunction :: IFunction -> Doc
-ppFunction (IFunction name _ body) = ppQName name <+> ppFuncBody body
+ppFunction (IFunction name _ _ _ body) = ppQName name <+> ppFuncBody body
 
 --- Pretty print a qualified ICurry name (module.localname)
 --- @param name the name
 --- @return     the pretty printed name
 ppQName :: IQName -> Doc
-ppQName (modname, localname) = text $ modname ++ '.' : localname
-
---- Pretty print an ICurry function's argument list
---- @param arity the number of variables (1.. is assumed)
---- @return      the pretty printed argument list
-ppArity :: IArity -> Doc
-ppArity arity = hsep $ map ppVar [1 .. arity]
+ppQName (modname, localname, _) = text $ modname ++ '.' : localname
 
 --- Pretty print an ICurry function's body
 --- @param body the function's body
 --- @return     the pretty printed function body
 ppFuncBody :: IFuncBody -> Doc
-ppFuncBody (IExternal arity name) = text ("external \"" ++ name ++ "\",")
-                                    <+> int arity
-                                    <+> text "args"
-ppFuncBody (IFuncBody vars block) = ppVars vars <+> equals <+> ppBlock block
+ppFuncBody (IExternal name) = text ("external \"" ++ name ++ "\",")
+ppFuncBody (IFuncBody block) = equals <+> ppBlock block
 
 --- Pretty print a list of variables
 --- @param vs the variables
@@ -102,68 +98,46 @@ ppVars :: [IVarIndex] -> Doc
 ppVars = hsep . map ppVar
 
 --- Pretty print a variable. Variables are called x0, x1, ...
+--- Since variable with index 0 is always used for the root,
+--- we print it as `ROOT`.
 --- @param v the variable
 --- @return  the pretty printed variable
 ppVar :: IVarIndex -> Doc
-ppVar = text . ('x':) . show
-
---- Pretty print type variables
---- @param tvs the type variables
---- @return    the pretty printed type variables
-ppTVars :: [ITVarIndex] -> Doc
-ppTVars = hsep . map (ppTVar 'a')
-
---- Pretty print a type variable
---- @param c  the character to denote the variable
---- @param tv the type variable
---- @return   the pretty printed type variable
-ppTVar :: Char -> ITVarIndex -> Doc
-ppTVar c = text . (c:) . show
-
---- Pretty print a type expression
---- @param c  the character to denote type variables
---- @param te the type expression
---- @return   the pretty pritned type expression
-ppTExpr :: Char -> ITExpr -> Doc
-ppTExpr c (ITVar v) = ppTVar c v
-ppTExpr c (ITFunc e1 e2) = parens (ppTExpr c e1)
-                           <+> rarrow <+>
-                           parens (ppTExpr c e2)
-ppTExpr c (ITCons n es) = parens $ ppQName n <+> hsep (map (ppTExpr c) es)
+ppVar v | v == 0    = text "ROOT"
+        | otherwise = text . ('x':) . show $ v
 
 --- Pretty print an ICurry block
 --- @param block the block
 --- @return      the rendered block
 ppBlock :: IBlock -> Doc
-ppBlock (ISimpleBlock a e) = nest 2 (
+ppBlock (IBlock decls asgns stmt) = nest 2 (
   lbrace $$
-  ppLocals (map fst a) $$
-  ppAssignments a $$
-  text "return" <+>
-  ppExpr e) $$ rbrace
-ppBlock (ICaseLitBlock a v bs) = nest 2 (
-  lbrace $$
-  ppLocals (map fst a) $$
-  ppAssignments a $$
-  ppLitBranches bs $$
-  text "case" <+> ppVar v <+> text "of") $$
-  rbrace
-ppBlock (ICaseConsBlock a v bs) = nest 2 (
-  lbrace $$
-  ppLocals (map fst a) $$
-  ppAssignments a $$
-  nest 2 (text "case" <+> ppVar v <+> text "of" $$
-  ppConsBranches bs)) $$
-  rbrace
+  ppVarDecls decls $$
+  ppAssignments asgns $$
+  ppStatement stmt $$
+  rbrace )
+
+--- Pretty print an ICurry block
+--- @param block the block
+--- @return      the rendered block
+ppStatement :: IStatement -> Doc
+ppStatement IExempt          = text "exempt"
+ppStatement (IReturn e)      = text "return" <+> ppExpr e
+ppStatement (ICaseCons v bs) = nest 2 (
+  text "case" <+> ppVar v <+> text "of" $$ ppConsBranches bs)
+ppStatement (ICaseLit v bs)  = nest 2 (
+  text "case" <+> ppVar v <+> text "of" $$ ppLitBranches bs)
 
 --- Pretty print local variable declarations
 --- @param vs the local variables
 --- @return   the pretty printed variable declarations
-ppLocals :: [IVarIndex] -> Doc
-ppLocals ls = if null ls
-                 then empty
-                 else text "local"
-                      <+> (hsep $ punctuate comma $ map ppVar ls)
+ppVarDecls :: [IVarDecl] -> Doc
+ppVarDecls = vcat . map ppVarDecl
+
+--- Pretty print a local variable declaration.
+ppVarDecl :: IVarDecl -> Doc
+ppVarDecl (IVarDecl  v) = text "declare" <+> ppVar v
+ppVarDecl (IFreeDecl v) = text "free" <+> ppVar v
 
 --- Pretty print assignments
 --- @param as the assignments
@@ -175,7 +149,9 @@ ppAssignments = vcat . map ppAssignment
 --- @param as the assignment
 --- @return   the pretty printed assignment
 ppAssignment :: IAssign -> Doc
-ppAssignment (v, e) = ppVar v <+> equals <+> ppExpr e
+ppAssignment (IVarAssign v e) = ppVar v <+> equals <+> ppExpr e
+ppAssignment (INodeAssign v pos e) =
+  ppVar v <+> ppPos pos <+> equals <+> ppExpr e
 
 --- Pretty print comma separated expressions
 --- @param exprs the expressions
@@ -188,30 +164,14 @@ ppExprs = hsep . punctuate comma . map ppExpr
 --- @return     the pretty printed expression
 ppExpr :: IExpr -> Doc
 ppExpr (IVar v)      = ppVar v
+ppExpr (IVarAccess v pos) = ppVar v <+> ppPos pos
 ppExpr (ILit l)      = ppLit l
 ppExpr (IFCall n es) = ppQName n <+> lparen <+> ppExprs es <+> rparen
-ppExpr (ICCall n es) = text "<constructor>" <+> ppExpr (IFCall n es)
-ppExpr (IOr es) = char '?' <+> lparen <+> ppExprs es <+> rparen
-
---- Pretty print an ICurry literal
---- @param lit the literal
---- @return    the pretty printed literal
-ppLit :: ILiteral -> Doc
-ppLit (IInt v)   = int v
-ppLit (IFloat v) = float v
-ppLit (IChar v)  = char v
-
---- Pretty print branches over literals
---- @param bs the branches
---- @return   the pretty printed branches
-ppLitBranches :: [ILitBranch] -> Doc
-ppLitBranches = hsep . map ppLitBranch
-
---- Pretty print a branch over literals
---- @param b the branch
---- @return  the pretty printed branch
-ppLitBranch :: ILitBranch -> Doc
-ppLitBranch (ILitBranch l block) = ppLit l <+> rarrow
+ppExpr (ICCall n es) = ppExpr (IFCall n es)
+ppExpr (IFPCall n _ es) = ppQName n <+> lparen <+> ppExprs es <+> rparen
+ppExpr (ICPCall n m es) = ppExpr (IFPCall n m es)
+ppExpr (IOr e1 e2)   =
+  lparen <+> ppExpr e1 <+> char '?' <+> ppExpr e2 <+> rparen
 
 --- Pretty print branches over constructors
 --- @param bs the branches
@@ -223,5 +183,30 @@ ppConsBranches = vcat . map ppConsBranch
 --- @param b the branch
 --- @return  the pretty printed branch
 ppConsBranch :: IConsBranch -> Doc
-ppConsBranch (IConsBranch c vs block) =
-  ppQName c <+> hsep (map ppVar vs) <+> rarrow <+> ppBlock block
+ppConsBranch (IConsBranch c block) = ppQName c <+> rarrow <+> ppBlock block
+
+--- Pretty print branches over literals
+--- @param bs the branches
+--- @return   the pretty printed branches
+ppLitBranches :: [ILitBranch] -> Doc
+ppLitBranches = hsep . map ppLitBranch
+
+--- Pretty print a branch over literals
+--- @param b the branch
+--- @return  the pretty printed branch
+ppLitBranch :: ILitBranch -> Doc
+ppLitBranch (ILitBranch l block) = ppLit l <+> rarrow <+> ppBlock block
+
+--- Pretty print an ICurry position
+ppPos :: [Int] -> Doc
+ppPos pos = text (show pos)
+
+--- Pretty print an ICurry literal
+--- @param lit the literal
+--- @return    the pretty printed literal
+ppLit :: ILiteral -> Doc
+ppLit (IInt v)   = int v
+ppLit (IFloat v) = float v
+ppLit (IChar v)  = char v
+
+------------------------------------------------------------------------------
