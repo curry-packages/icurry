@@ -309,51 +309,56 @@ m14 o = execIProg o exampleProg "notBool"
 ------------------------------------------------------------------------------
 -- Testing with CurryCheck.
 
+-- Like evalFun but returns results non-deterministically in order to
+-- abstract from the evaluation strategy.
+evalFunND :: IProg -> String -> String
+evalFunND prog fs = anyOf (evalFun prog fs)
+
 testCoin :: Prop
-testCoin = evalFun exampleProg "coin" <~> ("1" ? "2")
+testCoin = evalFunND exampleProg "coin" <~> ("1" ? "2")
 
 testHeadEmpty :: Prop
-testHeadEmpty = failing (evalFun exampleProg "headempty")
+testHeadEmpty = failing (evalFunND exampleProg "headempty")
 
 testHead1 :: Prop
-testHead1 = evalFun exampleProg "head1" <~> "1"
+testHead1 = evalFunND exampleProg "head1" <~> "1"
 
 testHead12 :: Prop
-testHead12 = evalFun exampleProg "head12" <~> ("1" ? "2")
+testHead12 = evalFunND exampleProg "head12" <~> ("1" ? "2")
 
 testHeadOneTwo :: Prop
-testHeadOneTwo = evalFun exampleProg "headOneTwo" <~> "1"
+testHeadOneTwo = evalFunND exampleProg "headOneTwo" <~> "1"
 
 testXorSelfBool :: Prop
-testXorSelfBool = evalFun exampleProg "xorSelfBool" <~> "False"
+testXorSelfBool = evalFunND exampleProg "xorSelfBool" <~> "False"
 
 testXorSelfDollarBangBool :: Prop
 testXorSelfDollarBangBool =
-  evalFun exampleProg "xorSelfDollarBangBool" <~> "False"
+  evalFunND exampleProg "xorSelfDollarBangBool" <~> "False"
 
 testXorSelfSeqBool :: Prop
-testXorSelfSeqBool = evalFun exampleProg "xorSelfSeqBool" <~> "False"
+testXorSelfSeqBool = evalFunND exampleProg "xorSelfSeqBool" <~> "False"
 
 testAndNotFalse :: Prop
-testAndNotFalse = evalFun exampleProg "andNotFalse" <~> "True"
+testAndNotFalse = evalFunND exampleProg "andNotFalse" <~> "True"
 
 testNotBool :: Prop
-testNotBool = evalFun exampleProg "notBool" <~> ("True" ? "False")
+testNotBool = evalFunND exampleProg "notBool" <~> ("True" ? "False")
 
 testIdTrue :: Prop
-testIdTrue = evalFun exampleProg "idTrue" <~> "True"
+testIdTrue = evalFunND exampleProg "idTrue" <~> "True"
 
 testCoinList :: Prop
-testCoinList = evalFun exampleProg "coinList" <~> ("(: 1 [])" ? "(: 2 [])")
+testCoinList = evalFunND exampleProg "coinList" <~> ("(: 1 [])" ? "(: 2 [])")
 
 testCoinCoinList :: Prop
 testCoinCoinList =
-  evalFun exampleProg "coinCoinList" <~>
+  evalFunND exampleProg "coinCoinList" <~>
   ("(: 1 (: 1 []))" ? "(: 2 (: 1 []))" ? "(: 1 (: 2 []))" ? "(: 2 (: 2 []))")
 
 testPerm123 :: Prop
 testPerm123 =
-  evalFun exampleProg "perm123" <~>
+  evalFunND exampleProg "perm123" <~>
   ("(: 1 (: 2 (: 3 [])))" ? "(: 1 (: 3 (: 2 [])))" ? "(: 2 (: 1 (: 3 [])))" ?
    "(: 2 (: 3 (: 1 [])))" ? "(: 3 (: 1 (: 2 [])))" ? "(: 3 (: 2 (: 1 [])))")
 

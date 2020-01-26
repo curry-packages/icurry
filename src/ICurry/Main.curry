@@ -50,7 +50,9 @@ mainProg opts p = do
                                  , withViewer = optViewPDF opts }
                     else defOpts
           opts2 = if optInteractive opts
-                    then opts1 { interactive = True, verbosity = 2 }
+                    then if optShowGraph opts
+                           then opts1 { interactive = True, verbosity = 2 }
+                           else opts1 { interactive = True }
                     else opts1
       execIProg opts2 iprog imain
 
@@ -95,7 +97,7 @@ options =
            "command to view PDF files (default: 'evince')"
   , Option "i" ["interactive"]
            (NoArg (\opts -> opts { optInteractive = True }))
-           "interactive execution (wait after each step)"
+           "interactive execution (ask after each result or step)"
   ]
  where
   safeReadNat opttrans s opts =

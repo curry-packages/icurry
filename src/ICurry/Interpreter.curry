@@ -10,7 +10,7 @@
 module ICurry.Interpreter
  where
 
-import List   ( init, last, replace )
+import List   ( init, isPrefixOf, last, replace )
 import System ( sleep, system )
 
 import ICurry.Types
@@ -77,16 +77,20 @@ currentNodeOfTask (Task (CNode nid) _ _)       = nid
 currentNodeOfTask (Task (IBlockEnv _ env) _ _) = lookupInEnv 0 env
 
 ------------------------------------------------------------------------------
--- The state of an ICurry program under evaluation.
+-- The state of an ICurry program under evaluation as described in the
+-- WFLP'19 paper.
+-- The auxiliary component `currResult` is set in a step when a new result
+-- has been computed.
 data State = State { program :: [IFunction]
                    , graph   :: Graph
                    , tasks   :: [Task]
                    , results :: [NodeID]
+                   , currResult :: Maybe NodeID
                    }
 
 -- Initial state for a program, graph, and root node id.
 initState :: [IFunction] -> Graph -> NodeID -> State
-initState prog graph nid = State prog graph [Task (CNode nid) [] []] []
+initState prog graph nid = State prog graph [Task (CNode nid) [] []] [] Nothing
 
 -- Returns the root nodes of all results and all expressions.
 rootsOfState :: State -> [NodeID]
@@ -95,6 +99,10 @@ rootsOfState st = results st ++ map rootOfTask (tasks st)
 -- Show all results stored in a state.
 showResults :: State -> String
 showResults st = unlines (map (showGraphExp (graph st)) (results st))
+
+-- Adds a result to a program state.
+addResult :: NodeID -> State -> State
+addResult nid st = st { results = results st ++ [nid], currResult = Just nid }
 
 -- Print the current state of the interpreter according to the given options.
 printState :: IOptions -> State -> IO ()
@@ -116,10 +124,7 @@ printState opts st = do
                , "FINGER PRINT: " ++ show fp ]
           else []
   when (withGraph opts || makePDF opts) $ showStateGraph
-
-  if interactive opts
-    then putStr "Type <RET> to proceed: " >> getLine >> done
-    else when (waitTime opts > 0) (sleep (waitTime opts))
+  when (waitTime opts > 0 && not (interactive opts)) $ sleep (waitTime opts)
   when (verb>0) $ putStrLn ""
  where
   verb = verbosity opts
@@ -157,6 +162,18 @@ The following coloring is used in the graph:
 - yellow filled node: root of the current contol
 
 -}
+
+askProceed :: IOptions -> IO Bool
+askProceed opts =
+  if interactive opts
+    then do putStr "Proceed (<RET>) or abort (a)? "
+            ans <- getLine
+            if null ans
+              then return True
+              else if ans `isPrefixOf` "abort"
+                     then putStrLn "Execution aborted!" >> return False
+                     else askProceed opts
+    else return True
 
 ------------------------------------------------------------------------------
 -- An interpreter for a single Curry program based on translating
@@ -196,26 +213,41 @@ runWith :: IOptions -> State -> IO IOptions
 runWith opts st
   | null (tasks st)
   = do printState opts st
-       putStr $ "RESULTS:\n" ++ showResults st
        return opts
   | otherwise
   = do printState opts st
-       let num   = stepNum opts
-           nopts = if num==0 then opts else opts { stepNum = num + 1 }
-       runWith nopts (step st)
+       procstep <- if verbosity opts > 0 then askProceed opts else return True
+       if not procstep
+         then return opts
+         else do
+           let num   = stepNum opts
+               nopts = if num==0 then opts else opts { stepNum = num + 1 }
+               nst   = step st
+           maybe (runWith nopts nst)
+                 (\nid -> do putStrLn $ "RESULT: " ++
+                                        showGraphExp (graph nst) nid
+                             proceed <- askProceed opts
+                             if proceed
+                               then runWith nopts nst {currResult = Nothing}
+                               else return opts)
+                 (currResult nst)
 
--- Evaluates a 0-ary function w.r.t. an ICurry program and return any result
--- formatted as a string.
+-- Evaluates a 0-ary function w.r.t. an ICurry program and returns
+-- the list of all results formatted as strings.
 -- Used for testing.
-evalFun :: IProg -> String -> String
+evalFun :: IProg -> String -> [String]
 evalFun (IProg _ _ _ ifuns) f =
   let (g,ni) = addNode (FuncNode f []) emptyGraph
-      final = evaluate (initState ifuns g ni)
-  in anyOf (map (showGraphExp (graph final)) (results final))
+  in evaluate (initState ifuns g ni)
  where
   evaluate st
-    | null (tasks st) = st
-    | otherwise       = evaluate (step st)
+    | null (tasks st) = []
+    | otherwise
+    = let st' = step st
+      in maybe (evaluate st')
+               (\nid -> showGraphExp (graph st') nid :
+                        evaluate st' {currResult = Nothing})
+               (currResult st')
 
 ------------------------------------------------------------------------------
 -- Implementation of the small-step semantics.
@@ -230,14 +262,14 @@ evalFirstTask _ [] = error "step: empty tasks"
 evalFirstTask st (Task (CNode nid) stk fp : tsks) =
   case lookupNode nid (graph st) of
     ConsNode _ _ -> case stk of
-      [] -> st { tasks = tsks, results = results st ++ [nid] }
+      [] -> addResult nid (st { tasks = tsks })
       ((fnid,_) : rstk) ->
          let st1 = st { tasks = Task (CNode fnid) rstk fp : tsks }
          in invokeFunction st1 (tasks st1)
 
     -- partial calls are treated as constructors:
     PartNode _ _ _ -> case stk of
-      [] -> st { tasks = tsks, results = results st ++ [nid] }
+      [] -> addResult nid (st { tasks = tsks })
       ((fnid,_) : rstk) ->
          let st1 = st { tasks = Task (CNode fnid) rstk fp : tsks }
          in invokeFunction st1 (tasks st1)
