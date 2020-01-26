@@ -283,8 +283,9 @@ evalFirstTask st (Task (CNode nid) stk fp : tsks) =
         [] -> case lookup cid fp of
           Just c  -> let ns = if c==1 then n1 else n2
                      in st { tasks = Task (CNode ns) stk fp : tsks }
-          Nothing -> st { tasks = tsks ++ [Task (CNode n1) [] ((cid,1) : fp),
-                                           Task (CNode n2) [] ((cid,2) : fp)] }
+          Nothing -> let newtasks = [Task (CNode n1) [] ((cid,1) : fp),
+                                     Task (CNode n2) [] ((cid,2) : fp)]
+                     in st { tasks = tsks ++ newtasks }
         ((fnid,di) : nids) -> -- pull-tab step:
           let g0 = graph st in
           case lookupNode fnid g0 of
