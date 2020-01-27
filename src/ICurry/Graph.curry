@@ -132,7 +132,7 @@ replaceNode (Graph nodes mx) oldnid newid =
 
 -- Shows the expression represented by the graph starting with a given node.
 -- In order to visualize sharing, shared subexpressions are shown
--- by let expressions.
+-- as let expressions.
 showGraphExp :: Graph -> NodeID -> String
 showGraphExp g nid = showExp [] 10 nid
  where
@@ -150,11 +150,20 @@ showGraphExp g nid = showExp [] 10 nid
            then ""
            else "let {" ++
                 intercalate " ; " (map showLetDecl arglets) ++ "} in ") ++
-        unwords (f : map (\a -> if a `elem` alllets
-                                  then showVar a
-                                  else showExp alllets (d-1) a) args) ++
+        showCall f (map (\a -> if a `elem` alllets
+                                 then showVar a
+                                 else showExp alllets (d-1) a) args) ++
         ")"
      where
+      showCall f args =
+        if isInfixOp f
+          then case args of
+                 [a1,a2] -> unwords [a1,f,a2]
+                 _       -> unwords (('(' : f ++ ")") : args)
+          else unwords (f : args)
+       where
+        isInfixOp = all (`elem` "!@#$%^&*+-=<>?./|\\:")
+
       arglets = nub (concatMap
                        (\a -> let occs = occursInGraphExp d a ni
                               in if occs < 2 || isConst a then [] else [a])

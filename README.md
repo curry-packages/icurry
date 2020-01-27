@@ -93,6 +93,6 @@ one can wrap it with the function `normalForm`, e.g.,
     mymain = normalForm (reverse [1,2,3])
 
 The current version of the interpreter supports only the prelude
-operations `normalForm` and `$!`.
+operations `normalForm`, `$#`, and `$!`.
 
 ----------------------------------------------------------------------------

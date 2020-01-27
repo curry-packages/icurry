@@ -333,31 +333,51 @@ evalFirstTask st (Task (IBlockEnv (IBlock vs asgns stm) ienv) stk fp : tsks) =
 invokeFunction :: State -> [Task] -> State
 invokeFunction _ [] = error "invokeFunction: empty tasks"
 invokeFunction st (Task (CNode nid) stk fp : tsks) =
-  case lookupNode nid (graph st) of
+  case lookupNode nid gr of
     FuncNode f ns -> case bodyOf f (program st) of
       IFuncBody blck ->
         let ienv = [(0, nid)]
         in st { tasks = Task (IBlockEnv blck ienv) stk fp : tsks }
       IExternal en -> case en of
-        "apply" -> 
-          let node = addPartialArg (lookupNode (ns!!0) (graph st)) (ns!!1)
-          in st { graph = updateNode (graph st) nid node }
-        "$!" -> st { graph = updateNode (graph st) nid (FuncNode "apply" ns) }
-        "normalForm" -> case lookupNode (ns!!0) (graph st) of
+        "normalForm" -> case lookupNode (ns!!0) gr of
           ConsNode c cargs ->
             let argsenv = zip [1..] cargs
                 evalcargs = foldl (\xs x -> IFCall ("","$!",0)
                                               [xs, IFCall ("","normalForm",0)
                                                           [IVar (fst x)]])
                                   (ICPCall ("",c,0) (length cargs) []) argsenv
-                (g1,nexp) = extendGraph (graph st) argsenv evalcargs
+                (gr1,nexp) = extendGraph gr argsenv evalcargs
             in st { graph = either (error "Internal error in normalForm")
-                                   (updateNode g1 nid) nexp }
+                                   (updateNode gr1 nid) nexp }
           _ -> error "step: use of 'normalForm' without constructor argument"
-        _    -> error $ "step: unknown external function: " ++ en
+        _ -> st { graph = updateNode gr nid (evalExternal gr en ns) }
     _ -> error "invokeFunction: no function node in control"
+ where gr = graph st
 invokeFunction _ (Task (IBlockEnv _ _) _ _ : _) =
   error "invokeFunction: no function node in control"
+
+-- Evaluates an external function to a node containing the evaluated value.
+-- The arguments are the current graph, the external name,
+-- and the argument nodes.
+evalExternal :: Graph -> String -> [NodeID] -> Node
+evalExternal gr ename ns = case unQName ename of
+  "apply" -> addPartialArg (lookupNode (ns!!0) gr) (ns!!1)
+  "$!"    -> FuncNode "apply" ns
+  "$#"    -> FuncNode "apply" ns
+  "prim_Int_plus" ->
+     ConsNode (show (lookupIntNode (ns!!0) gr + lookupIntNode (ns!!1) gr)) []
+  "prim_Int_mult" ->
+     ConsNode (show (lookupIntNode (ns!!0) gr * lookupIntNode (ns!!1) gr)) []
+  _    -> error $ "step: unknown external function: " ++ ename
+ where
+  unQName s = let (mn,ufn) = break (=='.') s
+              in if null ufn then mn else unQName (tail ufn)
+
+lookupIntNode :: NodeID -> Graph -> Int
+lookupIntNode nid gr = case lookupNode nid gr of
+  ConsNode c [] -> read c :: Int
+  _             -> error "lookupIntNode: no integer found"
+
 
 -- Selects the constructor branch corresponding to some constructor node.
 selectConsBranch :: Node -> [IConsBranch] -> IBlock
@@ -493,12 +513,17 @@ funSeq = IFunction ("Prelude","seq",0) 2 Public [0] $ IFuncBody $
 funDollarBang :: IFunction
 funDollarBang = IFunction ("Prelude","$!",0) 2 Public [1] (IExternal "$!")
 
+-- f $# x: demands x and returns (f x) (and suspends on a free variable
+-- which is not yet implemented)
+funDollarHash :: IFunction
+funDollarHash = IFunction ("Prelude","$#",0) 2 Public [1] (IExternal "$#")
+
 -- normalForm x: demands x and returns the normal form of x
 funNormalForm :: IFunction
 funNormalForm =
   IFunction ("Prelude","normalForm",0) 1 Public [0] (IExternal "normalForm")
 
 standardFuncs :: [IFunction]
-standardFuncs = [funApply, funSeq, funDollarBang, funNormalForm]
+standardFuncs = [funApply, funSeq, funDollarBang, funDollarHash, funNormalForm]
 
 ------------------------------------------------------------------------------

@@ -205,8 +205,8 @@ ppPos pos = text (show pos)
 --- @param lit the literal
 --- @return    the pretty printed literal
 ppLit :: ILiteral -> Doc
-ppLit (IInt v)   = int v
-ppLit (IFloat v) = float v
-ppLit (IChar v)  = char v
+ppLit (IInt i)   = int i
+ppLit (IFloat f) = float f
+ppLit (IChar c)  = text (show c)
 
 ------------------------------------------------------------------------------

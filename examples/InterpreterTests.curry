@@ -349,17 +349,17 @@ testIdTrue :: Prop
 testIdTrue = evalFunND exampleProg "idTrue" <~> "True"
 
 testCoinList :: Prop
-testCoinList = evalFunND exampleProg "coinList" <~> ("(: 1 [])" ? "(: 2 [])")
+testCoinList = evalFunND exampleProg "coinList" <~> ("(1 : [])" ? "(2 : [])")
 
 testCoinCoinList :: Prop
 testCoinCoinList =
   evalFunND exampleProg "coinCoinList" <~>
-  ("(: 1 (: 1 []))" ? "(: 2 (: 1 []))" ? "(: 1 (: 2 []))" ? "(: 2 (: 2 []))")
+  ("(1 : (1 : []))" ? "(2 : (1 : []))" ? "(1 : (2 : []))" ? "(2 : (2 : []))")
 
 testPerm123 :: Prop
 testPerm123 =
   evalFunND exampleProg "perm123" <~>
-  ("(: 1 (: 2 (: 3 [])))" ? "(: 1 (: 3 (: 2 [])))" ? "(: 2 (: 1 (: 3 [])))" ?
-   "(: 2 (: 3 (: 1 [])))" ? "(: 3 (: 1 (: 2 [])))" ? "(: 3 (: 2 (: 1 [])))")
+  ("(1 : (2 : (3 : [])))" ? "(1 : (3 : (2 : [])))" ? "(2 : (1 : (3 : [])))" ?
+   "(2 : (3 : (1 : [])))" ? "(3 : (1 : (2 : [])))" ? "(3 : (2 : (1 : [])))")
 
 ------------------------------------------------------------------------------
