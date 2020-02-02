@@ -34,7 +34,7 @@ iFPCall n = IFPCall (siq n)
 iCPCall :: String -> Int -> [IExpr] -> IExpr
 iCPCall n = ICPCall (siq n)
 
-iConsBranch :: String -> IBlock -> IConsBranch
+iConsBranch :: String -> Int -> IBlock -> IConsBranch
 iConsBranch n = IConsBranch (siq n)
 
 icurryList :: [IExpr] -> IExpr
@@ -72,8 +72,8 @@ funHead :: IFunction
 funHead = iFunction "head" 1 [0] $ IFuncBody $
   iBlock [1] [IVarAssign 1 (IVarAccess 0 [0])]
     (ICaseCons 1
-       [iConsBranch "[]" (IBlock [] [] IExempt),
-        iConsBranch ":"  (simpleRHS (IVarAccess 1 [0]))])
+       [iConsBranch "[]" 0 (IBlock [] [] IExempt),
+        iConsBranch ":"  2 (simpleRHS (IVarAccess 1 [0]))])
 
 funHeadEmpty :: IFunction
 funHeadEmpty = iFunction "headempty" 0 [] $ IFuncBody $
@@ -94,8 +94,8 @@ funNot :: IFunction
 funNot = iFunction "not" 1 [0] $ IFuncBody $
   iBlock [1] [IVarAssign 1 (IVarAccess 0 [0])]
     (ICaseCons 1
-       [iConsBranch "False" (simpleRHS (iCCall "True"  [])),
-        iConsBranch "True"  (simpleRHS (iCCall "False" []))])
+       [iConsBranch "False" 0 (simpleRHS (iCCall "True"  [])),
+        iConsBranch "True"  0 (simpleRHS (iCCall "False" []))])
 
 -- (&&) x y = case { False -> False ; True -> y }
 funAnd :: IFunction
@@ -103,8 +103,8 @@ funAnd = iFunction "&&" 2 [0] $ IFuncBody $
   iBlock [1,2] [IVarAssign 1 (IVarAccess 0 [0]),
                 IVarAssign 2 (IVarAccess 0 [1])]
     (ICaseCons 1
-       [iConsBranch "False" (simpleRHS (iCCall "False" [])),
-        iConsBranch "True"  (simpleRHS (IVar 2))])
+       [iConsBranch "False" 0 (simpleRHS (iCCall "False" [])),
+        iConsBranch "True"  0 (simpleRHS (IVar 2))])
 
 -- xor x y = case { False -> y ; True -> not y }
 funXor :: IFunction
@@ -113,8 +113,8 @@ funXor = iFunction "xor" 2 [0] $ IFuncBody $
          [IVarAssign 1 (IVarAccess 0 [0]),
           IVarAssign 2 (IVarAccess 0 [1])]
      (ICaseCons 1
-        [iConsBranch "False" (simpleRHS (IVar 2)),
-         iConsBranch "True"  (simpleRHS (iFCall "not" [IVar 2]))])
+        [iConsBranch "False" 0 (simpleRHS (IVar 2)),
+         iConsBranch "True"  0 (simpleRHS (iFCall "not" [IVar 2]))])
 
 -- xorSelf x = xor x x
 funXorSelf :: IFunction
@@ -221,8 +221,8 @@ funNDInsert1 :: IFunction
 funNDInsert1 = iFunction "ndinsert1" 1 [1] $ IFuncBody $
   iBlock [1] [IVarAssign 1 (IVarAccess 0 [1])]
     (ICaseCons 1
-       [iConsBranch "[]" (IBlock [] [] IExempt),
-        iConsBranch ":"  
+       [iConsBranch "[]" 0 (IBlock [] [] IExempt),
+        iConsBranch ":" 2
           (IBlock [] []
              (IReturn
                 (iCCall ":" [IVarAccess 1 [0],
@@ -244,8 +244,8 @@ funPerm :: IFunction
 funPerm = iFunction "perm" 1 [0] $ IFuncBody $
   iBlock [1] [IVarAssign 1 (IVarAccess 0 [0])]
     (ICaseCons 1
-       [iConsBranch "[]" (simpleRHS (iCCall "[]" [])),
-        iConsBranch ":"
+       [iConsBranch "[]" 0 (simpleRHS (iCCall "[]" [])),
+        iConsBranch ":" 2
           (IBlock [] []
              (IReturn
                 (iFCall "ndinsert" [IVarAccess 1 [0],

@@ -383,7 +383,7 @@ lookupIntNode nid gr = case lookupNode nid gr of
 selectConsBranch :: Node -> [IConsBranch] -> IBlock
 selectConsBranch nd [] =
   error $ "selectConsBranch: no branch for node: " ++ show nd
-selectConsBranch nd (IConsBranch (_,c,_) blck : branches) = case nd of
+selectConsBranch nd (IConsBranch (_,c,_) _ blck : branches) = case nd of
   ConsNode nc _ -> if nc == c then blck
                               else selectConsBranch nd branches
   _             -> error $ "selectConsBranch: unevaluated branch node: " ++

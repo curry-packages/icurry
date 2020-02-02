@@ -183,7 +183,8 @@ ppConsBranches = vcat . map ppConsBranch
 --- @param b the branch
 --- @return  the pretty printed branch
 ppConsBranch :: IConsBranch -> Doc
-ppConsBranch (IConsBranch c block) = ppQName c <+> rarrow <+> ppBlock block
+ppConsBranch (IConsBranch c ar block) =
+  ppQName c <+> char '/' <+> int ar <+> rarrow <+> ppBlock block
 
 --- Pretty print branches over literals
 --- @param bs the branches

@@ -61,8 +61,10 @@ icCompile opts p = do
   printDetails opts (textWithLines "Generated ICurry file:" ++ showIProg icprog)
   return icprog
  where
-  consMapOfProg prog = concatMap (\ (_,cars) -> zip (map fst cars) [0..])
-                                 (dataDeclsOf prog)
+  consMapOfProg prog =
+    concatMap (\ (_,cars) -> map (\ ((cname,car),pos) -> (cname,(car,pos)))
+                                 (zip cars [0..]))
+              (dataDeclsOf prog)
 
   -- compute mapping of public function names to indices
   publicFunMapOfProg prog =
@@ -91,17 +93,22 @@ data ICOptions = ICOptions
   , optShowGraph :: Bool   -- visualize graph during execution?
   , optViewPDF   :: String -- command to view graph PDF
   , optInteractive :: Bool   -- interactive execution?
-  , optConsMap   :: [(QName,Int)] -- map from constructor names to positions
-  , optFunMap    :: [(QName,Int)] -- map from function names to module indices
+  , optConsMap   :: [(QName,(Int,Int))] -- map: constr names to arity/position
+  , optFunMap    :: [(QName,Int)]       -- map: function names to module indices
   , optFun       :: QName  -- currently compiled function
   }
 
 defaultICOptions :: ICOptions
 defaultICOptions = ICOptions 1 False "" False "evince" False [] [] ("","")
 
-posOfCons :: ICOptions -> QName -> Int
-posOfCons opts qn =
+-- Lookup arity and position index of a constructor.
+arityPosOfCons :: ICOptions -> QName -> (Int,Int)
+arityPosOfCons opts qn =
   maybe (error "Internal error: posOfCons") id (lookup qn (optConsMap opts))
+
+-- Lookup position index of a constructor.
+posOfCons :: ICOptions -> QName -> Int
+posOfCons opts qn = snd (arityPosOfCons opts qn)
 
 posOfFun :: ICOptions -> QName -> Int
 posOfFun opts qn =
@@ -205,7 +212,8 @@ toIBlock opts vs e root =
                    _     -> caseVar
 
   trPBranch carg (Branch (Pattern qn@(mn,cn) pvs) be) =
-    IConsBranch (mn, cn, posOfCons opts qn) (toIBlock opts pvs be carg)
+    let (ar,pos) = arityPosOfCons opts qn
+    in IConsBranch (mn, cn, pos) ar (toIBlock opts pvs be carg)
   trPBranch _ (Branch (LPattern _) _) = funError opts "trPBranch with LPattern"
 
   trLBranch carg (Branch (LPattern lit) be) =

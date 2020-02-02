@@ -107,10 +107,10 @@ data IStatement =
   deriving (Show, Read)
 
 --- An ICurry case branch over algebraic constructors.
---- Only the constructor matching this branch is given.
+--- Only the constructor and its arity matching this branch is given.
 --- The assignments of constructor arguments to pattern variables
 --- must be done in the ICurry block.
-data IConsBranch = IConsBranch IQName IBlock
+data IConsBranch = IConsBranch IQName Int IBlock
   deriving (Show, Read)
 
 --- An ICurry case branch over literals.
