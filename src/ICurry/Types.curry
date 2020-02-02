@@ -110,7 +110,7 @@ data IStatement =
 --- Only the constructor and its arity matching this branch is given.
 --- The assignments of constructor arguments to pattern variables
 --- must be done in the ICurry block.
-data IConsBranch = IConsBranch IQName Int IBlock
+data IConsBranch = IConsBranch IQName IArity IBlock
   deriving (Show, Read)
 
 --- An ICurry case branch over literals.

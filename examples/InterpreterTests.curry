@@ -34,7 +34,7 @@ iFPCall n = IFPCall (siq n)
 iCPCall :: String -> Int -> [IExpr] -> IExpr
 iCPCall n = ICPCall (siq n)
 
-iConsBranch :: String -> Int -> IBlock -> IConsBranch
+iConsBranch :: String -> IArity -> IBlock -> IConsBranch
 iConsBranch n = IConsBranch (siq n)
 
 icurryList :: [IExpr] -> IExpr

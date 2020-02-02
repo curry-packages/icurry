@@ -93,7 +93,7 @@ data ICOptions = ICOptions
   , optShowGraph :: Bool   -- visualize graph during execution?
   , optViewPDF   :: String -- command to view graph PDF
   , optInteractive :: Bool   -- interactive execution?
-  , optConsMap   :: [(QName,(Int,Int))] -- map: constr names to arity/position
+  , optConsMap   :: [(QName,(IArity,Int))] -- map: cons. names to arity/position
   , optFunMap    :: [(QName,Int)]       -- map: function names to module indices
   , optFun       :: QName  -- currently compiled function
   }
@@ -102,7 +102,7 @@ defaultICOptions :: ICOptions
 defaultICOptions = ICOptions 1 False "" False "evince" False [] [] ("","")
 
 -- Lookup arity and position index of a constructor.
-arityPosOfCons :: ICOptions -> QName -> (Int,Int)
+arityPosOfCons :: ICOptions -> QName -> (IArity,Int)
 arityPosOfCons opts qn =
   maybe (error "Internal error: posOfCons") id (lookup qn (optConsMap opts))
 
