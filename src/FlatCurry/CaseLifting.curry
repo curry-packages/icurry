@@ -1,13 +1,13 @@
 ------------------------------------------------------------------------------
 --- This module contains an implementation of a case lifter, i.e.,
---- an operation which lifts all nested cases in a FlatCurry program
---- into new operations.
+--- an operation which lifts all nested cases (and also nested lets)
+--- in a FlatCurry program into new operations.
 ---
 --- NOTE: the new operations contain nonsense types, i.e., this transformation
---- should only be used when the actual function types are irrelevant!
+--- should only be used if the actual function types are irrelevant!
 ---
 --- @author Michael Hanus
---- @version January 2020
+--- @version February 2020
 ------------------------------------------------------------------------------
 
 module FlatCurry.CaseLifting where
@@ -18,19 +18,19 @@ import FlatCurry.Goodies ( allVars )
 import FlatCurry.Types
 
 ------------------------------------------------------------------------------
---- Options for case lifting.
+--- Options for case/let/free lifting.
 data LiftOptions = LiftOptions
-  { caseFun :: QName -- name of possibly case function
+  { currFun :: QName -- name of current function to be lifted
   }
 
 defaultOpts :: LiftOptions
 defaultOpts = LiftOptions ("","")
 
 -- Add suffix to case function
-add2caseFun :: LiftOptions -> String -> LiftOptions
-add2caseFun opts suff =
-  let (mn,fn) = caseFun opts
-  in opts { caseFun = (mn, fn ++ suff) }
+addSuffix2Fun :: LiftOptions -> String -> LiftOptions
+addSuffix2Fun opts suff =
+  let (mn,fn) = currFun opts
+  in opts { currFun = (mn, fn ++ suff) }
 
 ------------------------------------------------------------------------------
 
@@ -42,7 +42,7 @@ liftProg opts (Prog mn imps types funs ops) =
 --- Lift all nested cases in a FlatCurry function.
 liftFun :: LiftOptions -> FuncDecl -> [FuncDecl]
 liftFun opts (Func fn ar vis texp rule) =
-  let (nrule, nfs) = liftRule opts { caseFun = fn } rule
+  let (nrule, nfs) = liftRule opts { currFun = fn } rule
   in Func fn ar vis texp nrule : nfs
 
 
@@ -70,7 +70,7 @@ liftExp opts lft exp@(Case ct e brs) = case e of
   -- lift case expression by creating new function call:
   liftCaseExp True =
     let vs       = unboundVars exp
-        cfn      = caseFun (add2caseFun opts "$CASE")
+        cfn      = currFun (addSuffix2Fun opts "$CASE")
         noneType = TCons ("Prelude","None") []
         caseFunc = Func cfn (length vs) Private noneType (Rule vs exp)
     in (Comb FuncCall cfn (map Var vs), liftFun opts caseFunc)
@@ -80,7 +80,7 @@ liftExp opts lft exp@(Case ct e brs) = case e of
     let (ne, nefs) = liftExpArg opts 0 e
         casevar    = maximum (0 : allVars exp) + 1
         vs         = unionMap unboundVarsInBranch brs
-        cfn        = caseFun (add2caseFun opts "$COMPLEXCASE")
+        cfn        = currFun (addSuffix2Fun opts "$COMPLEXCASE")
         noneType   = TCons ("Prelude","None") []
         caseFunc   = Func cfn (length vs + 1) Private noneType
                           (Rule (vs ++ [casevar]) (Case ct (Var casevar) brs))
@@ -94,14 +94,21 @@ liftExp opts False (Let bs e) =
 -- lift let expression by creating new function call:
 liftExp opts True exp@(Let _ _) =
   let vs       = unboundVars exp
-      cfn      = caseFun (add2caseFun opts "$LET")
+      cfn      = currFun (addSuffix2Fun opts "$LET")
       noneType = TCons ("Prelude","None") []
       letFunc  = Func cfn (length vs) Private noneType (Rule vs exp)
   in (Comb FuncCall cfn (map Var vs), liftFun opts letFunc)
 
-liftExp opts _ (Free vs e) =
+liftExp opts False (Free vs e) =
   let (ne, nfs) = liftExp opts True e
   in (Free vs ne, nfs)
+liftExp opts True exp@(Free _ _) =
+  let vs       = unboundVars exp
+      cfn      = currFun (addSuffix2Fun opts "$FREE")
+      noneType = TCons ("Prelude","None") []
+      freeFunc = Func cfn (length vs) Private noneType (Rule vs exp)
+  in (Comb FuncCall cfn (map Var vs), liftFun opts freeFunc)
+
 liftExp opts _ (Or e1 e2) =
   let (ne1, nfs1) = liftExpArg opts 1 e1
       (ne2, nfs2) = liftExpArg opts 2 e2
@@ -113,7 +120,7 @@ liftExp opts lft (Typed e te) =
 -- Lift an argument of an expression so that the argument number
 -- is added to the case function in order to obtain unique names.
 liftExpArg :: LiftOptions -> Int -> Expr -> (Expr, [FuncDecl])
-liftExpArg opts argnum = liftExp (add2caseFun opts ('_' : show argnum)) True
+liftExpArg opts argnum = liftExp (addSuffix2Fun opts ('_' : show argnum)) True
 
 liftBranch :: LiftOptions -> (Int,BranchExpr) -> (BranchExpr, [FuncDecl])
 liftBranch opts (bnum, Branch pat e) =
