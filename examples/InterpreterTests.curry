@@ -132,6 +132,11 @@ funNotBool :: IFunction
 funNotBool = iFunction "notBool" 0 [] $ IFuncBody $
   simpleRHS (iFCall "not" [iFCall "aBool" []])
 
+-- notFree = not b where b free
+funNotFree :: IFunction
+funNotFree = iFunction "notFree" 0 [] $ IFuncBody $
+  IBlock [IFreeDecl 1] [] (IReturn $ iFCall "not" [IVar 1])
+
 -- xorSelfBool = xorSelf aBool
 funXorSelfBool :: IFunction
 funXorSelfBool = iFunction "xorSelfBool" 0 [] $ IFuncBody $
@@ -168,6 +173,14 @@ funDollarBang = iFunction "$!" 2 [1] (IExternal "$!")
 funNormalForm :: IFunction
 funNormalForm =
   iFunction "normalForm" 1 [0] (IExternal "normalForm")
+
+-- f $$! x = f (id $! x), i.e., first f and then x is demanded, returns (f x).
+-- Used for computations of normal forms with left to right argument evaluation.
+funDollarDollarBang :: IFunction
+funDollarDollarBang = iFunction "$$!" 2 [0] $ IFuncBody $
+  IBlock [IVarDecl 1,IVarDecl 2]
+         [IVarAssign 1 (IVarAccess 0 [0]),IVarAssign 2 (IVarAccess 0 [1])]
+         (IReturn (iFCall "$!" [IVar 1, IVar 2]))
 
 -- xorSelfSeqBool = let x = aBool in seq x (xorSelf x)
 funXorSelfSeqBool :: IFunction
@@ -263,9 +276,10 @@ funPerm123 = iFunction "perm123" 0 [] $ IFuncBody $
 allFuns :: [IFunction]
 allFuns =
   [ funCoin, funHead, funHeadEmpty, funHead1, funHead12
-  , funNot,funAnd, funNotBool, funXor,funXorSelf,funABool,funXorSelfBool
+  , funNot,funAnd, funNotBool, funNotFree
+  , funXor,funXorSelf,funABool,funXorSelfBool
   , funOneTwo, funHeadOneTwo
-  , funApply, funDollarBang, funSeq, funNormalForm
+  , funApply, funDollarBang, funDollarDollarBang, funSeq, funNormalForm
   , funXorSelfSeqBool, funXorSelfDollarBangBool
   , funAndNotFalse, funCoinList, funCoinCoinList
   , funNDInsert, funNDInsert1, funPerm, funInsert123, funPerm123
@@ -290,7 +304,8 @@ stdint = std { interactive = True }
 details :: IOptions
 details = stdint { verbosity = 4 }
 
-m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12, m13, m14 :: IOptions -> IO ()
+m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12, m13, m14, m15
+  :: IOptions -> IO ()
 m1 o = execIProg o exampleProg "coin"
 m2 o = execIProg o exampleProg "headempty"
 m3 o = execIProg o exampleProg "head1"
@@ -305,6 +320,7 @@ m11 o = execIProg o exampleProg "coinCoinList"
 m12 o = execIProg o exampleProg "perm123"
 m13 o = execIProg o exampleProg "idTrue"
 m14 o = execIProg o exampleProg "notBool"
+m15 o = execIProg o exampleProg "notFree"
 
 ------------------------------------------------------------------------------
 -- Testing with CurryCheck.
@@ -344,6 +360,9 @@ testAndNotFalse = evalFunND exampleProg "andNotFalse" <~> "True"
 
 testNotBool :: Prop
 testNotBool = evalFunND exampleProg "notBool" <~> ("True" ? "False")
+
+testNotFree :: Prop
+testNotFree = evalFunND exampleProg "notFree" <~> ("True" ? "False")
 
 testIdTrue :: Prop
 testIdTrue = evalFunND exampleProg "idTrue" <~> "True"

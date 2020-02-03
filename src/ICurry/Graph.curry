@@ -54,11 +54,13 @@ type ChoiceID = Int
 data PartCall = PartFuncCall Int | PartConsCall Int
  deriving Show
 
--- A graph node is a function, constructor, or choice node.
+-- A graph node is a function, constructor, choice, or free node.
+-- The latter represents unbound variables.
 data Node = FuncNode   String   [NodeID]
           | ConsNode   String   [NodeID]
           | PartNode   String   PartCall [NodeID]
           | ChoiceNode ChoiceID NodeID NodeID
+          | FreeNode
  deriving Show
 
 -- The label of a node.
@@ -67,6 +69,7 @@ nodeLabel (FuncNode f _)       = f
 nodeLabel (ConsNode f _)       = f
 nodeLabel (PartNode f _ _)     = f
 nodeLabel (ChoiceNode cid _ _) = "?" ++ show cid
+nodeLabel FreeNode             = "free"
 
 -- Add an argument node to a node representing a partial call.
 addPartialArg :: Node -> NodeID -> Node
@@ -99,6 +102,10 @@ lookupNode ni (Graph nodes _) =
         id
         (lookup ni nodes)
 
+-- Returns maximum node id of a graph.
+maxNodeID :: Graph -> NodeID
+maxNodeID (Graph _ m) = m
+
 -- Adds a new node in a graph.
 addNode :: Node -> Graph -> (Graph,NodeID)
 addNode node (Graph nodes mx) =
@@ -121,11 +128,12 @@ replaceNode (Graph nodes mx) oldnid newid =
  where
   redirect (ni, n) = (ni, redirectTargets n)
 
-  redirectTargets (FuncNode f ns)   = FuncNode f (map redirectTarget ns)
-  redirectTargets (ConsNode f ns)   = ConsNode f (map redirectTarget ns)
-  redirectTargets (PartNode f n ns) = PartNode f n (map redirectTarget ns)
+  redirectTargets (FuncNode f ns)      = FuncNode f (map redirectTarget ns)
+  redirectTargets (ConsNode f ns)      = ConsNode f (map redirectTarget ns)
+  redirectTargets (PartNode f n ns)    = PartNode f n (map redirectTarget ns)
   redirectTargets (ChoiceNode c n1 n2) =
     ChoiceNode c (redirectTarget n1) (redirectTarget n2)
+  redirectTargets FreeNode             = FreeNode
 
   redirectTarget ni = if ni == oldnid then newid else ni
 
@@ -139,6 +147,7 @@ showGraphExp g nid = showExp [] 10 nid
   showExp lets d ni | d == 0    = "..."
                     | otherwise = showNExp (lookupNode ni g)
    where
+    showNExp FreeNode             = "_x" ++ show ni
     showNExp (ConsNode f args)    = showNExp (FuncNode f args)
     showNExp (PartNode f _ args)  = showNExp (FuncNode f args)
     showNExp (ChoiceNode c n1 n2) = showNExp (FuncNode ('?' : show c) [n1,n2])
@@ -150,17 +159,17 @@ showGraphExp g nid = showExp [] 10 nid
            then ""
            else "let {" ++
                 intercalate " ; " (map showLetDecl arglets) ++ "} in ") ++
-        showCall f (map (\a -> if a `elem` alllets
-                                 then showVar a
-                                 else showExp alllets (d-1) a) args) ++
+        showCall (map (\a -> if a `elem` alllets
+                               then showVar a
+                               else showExp alllets (d-1) a) args) ++
         ")"
      where
-      showCall f args =
+      showCall cargs =
         if isInfixOp f
-          then case args of
+          then case cargs of
                  [a1,a2] -> unwords [a1,f,a2]
-                 _       -> unwords (('(' : f ++ ")") : args)
-          else unwords (f : args)
+                 _       -> unwords (('(' : f ++ ")") : cargs)
+          else unwords (f : cargs)
        where
         isInfixOp = all (`elem` "!@#$%^&*+-=<>?./|\\:")
 
@@ -190,6 +199,7 @@ showGraphExp g nid = showExp [] 10 nid
         PartNode _ _ args  -> foldr (+) 0 (map (occursInGraphExp (d-1) ni) args)
         ChoiceNode _ a1 a2 -> occursInGraphExp (d-1) ni a1 +
                               occursInGraphExp (d-1) ni a2
+        FreeNode           -> 0
     
 
 -- Transforms a graph (w.r.t. given node attributes) into a dot graph.
@@ -213,10 +223,11 @@ fullGraphToDot (Graph nodes _) ndattrs withnids =
     ndlabel  = nodeLabel n ++ if withnids then " [" ++ show nid ++ "]" else ""
     addAttrs = maybe [] id (lookup nid ndattrs)
 
-  toEdges (nid, FuncNode _   ns) = addEdges nid ns
-  toEdges (nid, ConsNode _   ns) = addEdges nid ns
-  toEdges (nid, PartNode _ _ ns) = addEdges nid ns
+  toEdges (nid, FuncNode _   ns   ) = addEdges nid ns
+  toEdges (nid, ConsNode _   ns   ) = addEdges nid ns
+  toEdges (nid, PartNode _ _ ns   ) = addEdges nid ns
   toEdges (nid, ChoiceNode _ n1 n2) = addEdges nid [n1,n2]
+  toEdges (_  , FreeNode          ) = []
 
   addEdges src ns =
     map (\ (i,n) -> Dot.Edge (show src) (show n) [("label",show i)])
@@ -238,7 +249,8 @@ reachableGraph (Graph nodes mx) initnids =
             (\nd -> case nd of FuncNode _ ns      -> ns
                                ConsNode _ ns      -> ns
                                PartNode _ _ ns    -> ns
-                               ChoiceNode _ n1 n2 -> [n1,n2])
+                               ChoiceNode _ n1 n2 -> [n1,n2]
+                               FreeNode           -> [])
             (lookup ni nodes)
 
 ------------------------------------------------------------------------------

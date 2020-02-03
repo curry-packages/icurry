@@ -12,6 +12,7 @@ module ICurry.Interpreter
 
 import List   ( init, isPrefixOf, last, replace )
 import System ( sleep, system )
+import Unsafe
 
 import ICurry.Types
 import ICurry.Graph
@@ -87,6 +88,7 @@ data State = State { program :: [IFunction]
                    , results :: [NodeID]
                    , currResult :: Maybe NodeID
                    }
+ deriving Show
 
 -- Initial state for a program, graph, and root node id.
 initState :: [IFunction] -> Graph -> NodeID -> State
@@ -258,7 +260,7 @@ step st = evalFirstTask st (tasks st)
 
 -- The small step on the first task.
 evalFirstTask :: State -> [Task] -> State
-evalFirstTask _ [] = error "step: empty tasks"
+evalFirstTask _  [] = error "step: empty tasks"
 evalFirstTask st (Task (CNode nid) stk fp : tsks) =
   case lookupNode nid (graph st) of
     ConsNode _ _ -> case stk of
@@ -296,12 +298,26 @@ evalFirstTask st (Task (CNode nid) stk fp : tsks) =
                     , tasks = Task (CNode fnid) nids fp : tsks }
             _ -> error "step: stack does not refer to function node"
 
+    FreeNode -> case stk of
+      [] -> addResult nid (st { tasks = tsks })
+      ((fnid,_) : rstk) ->
+         -- bind free node to choice structure corresponding to case expression
+         maybe
+           (let newtsks = Task (CNode fnid) rstk fp : tsks
+            in invokeFunction (st { tasks = newtsks }) newtsks)
+           (\chexp ->
+             let (gr1,nd) = extendGraph (graph st) [] chexp
+                 chnd = either (error "evalFirstTask: no choice") id nd
+             in st { graph = updateNode gr1 nid chnd })
+           (choiceOfDemand st fnid)
+
 evalFirstTask st (Task (IBlockEnv (IBlock vs asgns stm) ienv) stk fp : tsks) =
-  let (g1,ienv1) = addAssigns (graph st) asgns (map toNull vs ++ ienv) in
+  let (g0,ienv0) = addVarDecls (graph st) ienv vs
+      (g1,ienv1) = addAssigns g0 ienv0 asgns in
   case stm of
     IExempt -> st { tasks = tsks }  -- failure: remove current task
   
-    IReturn iexp -> -- return: replace ROOT node
+    IReturn iexp -> -- return statement: replace current ROOT node
       let (g2,nexp)  = extendGraph g1 ienv1 iexp
           rootid     = lookupInEnv 0 ienv
       in either (\ni -> st { graph = replaceNode g2 rootid ni,
@@ -321,9 +337,6 @@ evalFirstTask st (Task (IBlockEnv (IBlock vs asgns stm) ienv) stk fp : tsks) =
           sb = selectLitBranch (lookupNode bn g1) branches
       in st { graph = g1
             , tasks = Task (IBlockEnv sb ienv1) stk fp : tsks }
- where
-  toNull (IVarDecl  v) = (v, 0)
-  toNull (IFreeDecl v) = (v, 0)
 
 -- This operation is used when the control of the first task contains
 -- a function node ready for execution, i.e., a possibly demanded argument
@@ -339,16 +352,20 @@ invokeFunction st (Task (CNode nid) stk fp : tsks) =
         let ienv = [(0, nid)]
         in st { tasks = Task (IBlockEnv blck ienv) stk fp : tsks }
       IExternal en -> case en of
-        "normalForm" -> case lookupNode (ns!!0) gr of
+        "normalForm" -> let nfarg = ns !! 0 in case lookupNode nfarg gr of
           ConsNode c cargs ->
             let argsenv = zip [1..] cargs
-                evalcargs = foldl (\xs x -> IFCall ("","$!",0)
+                evalcargs = foldl (\xs x -> IFCall ("","$$!",0)
                                               [xs, IFCall ("","normalForm",0)
                                                           [IVar (fst x)]])
                                   (ICPCall ("",c,0) (length cargs) []) argsenv
                 (gr1,nexp) = extendGraph gr argsenv evalcargs
             in st { graph = either (error "Internal error in normalForm")
                                    (updateNode gr1 nid) nexp }
+          FreeNode -> -- Warning: this does not work of free variable will be
+                      -- later instantiated!
+                      st { graph = replaceNode gr nid nfarg
+                         , tasks = Task (CNode nfarg) stk fp : tsks }
           _ -> error "step: use of 'normalForm' without constructor argument"
         _ -> st { graph = updateNode gr nid (evalExternal gr en ns) }
     _ -> error "invokeFunction: no function node in control"
@@ -399,20 +416,28 @@ selectLitBranch nd (ILitBranch l blck : branches) = case nd of
   _             -> error $ "selectLitBranch: unevaluated branch node: " ++
                            show nd
 
--- Adds assignments to the environment and graph.
-addAssigns :: Graph -> [IAssign] -> IEnv -> (Graph,IEnv)
-addAssigns g [] env = (g,env)
-addAssigns g (IVarAssign v e : asgns) env =
+-- Adds variable declarations to the graph and environment.
+addVarDecls :: Graph -> IEnv -> [IVarDecl] -> (Graph,IEnv)
+addVarDecls g env []                     = (g,env)
+addVarDecls g env (IVarDecl  v : vdecls) = addVarDecls g ((v,0) : env) vdecls
+addVarDecls g env (IFreeDecl v : vdecls) =
+  let (g1,fn) = addNode FreeNode g
+  in addVarDecls g1 ((v,fn) : env) vdecls
+
+-- Adds assignments to the graph and environment.
+addAssigns :: Graph -> IEnv -> [IAssign] -> (Graph,IEnv)
+addAssigns g env [] = (g,env)
+addAssigns g env (IVarAssign v e : asgns) =
   let (g1,ne)  = extendGraph g env e
       (g2,nid) = either (\ni -> (g1,ni)) (\nd -> addNode nd g1) ne
-  in addAssigns g2 asgns (updateEnv env v nid)
-addAssigns _ (INodeAssign _ [] _ : _) _ =
+  in addAssigns g2 (updateEnv env v nid) asgns
+addAssigns _ _ (INodeAssign _ [] _ : _) =
   error "addAssigns: empty path"
-addAssigns g (INodeAssign v path@(_:_) e : asgns) env =
+addAssigns g env (INodeAssign v path@(_:_) e : asgns) =
   let n        = followPath g (lookupInEnv v env) (init path)
       (g1,ne)  = extendGraph g env e
       (g2,nid) = either (\ni -> (g1,ni)) (\nd -> addNode nd g1) ne
-  in addAssigns (replaceNodeArg g2 n (last path) nid) asgns env
+  in addAssigns (replaceNodeArg g2 n (last path) nid) env asgns
 
 -- Replaces the i-th successor of node `nid` by node `narg`.
 replaceNodeArg :: Graph -> NodeID -> Int -> NodeID -> Graph
@@ -421,6 +446,7 @@ replaceNodeArg g nid i narg = case lookupNode nid g of
   FuncNode f ns    -> updateNode g nid (FuncNode f (replace narg i ns))
   PartNode f m ns  -> updateNode g nid (PartNode f m (replace narg i ns))
   ChoiceNode _ _ _ -> error "replaceNodeArg: ChoiceNode"
+  FreeNode         -> error "replaceNodeArg: FreeNode"
 
 -- Follows a path from a given node.
 followPath :: Graph -> NodeID -> [Int] -> NodeID
@@ -429,7 +455,8 @@ followPath g n (i:is) = case lookupNode n g of
   ConsNode _ ns      -> followPath g (selectArg ns) is
   FuncNode _ ns      -> followPath g (selectArg ns) is
   PartNode _ _ ns    -> followPath g (selectArg ns) is
-  ChoiceNode _ n1 n2 -> followPath g (if i==0 then n1 else n2) is
+  ChoiceNode _ n1 n2 -> followPath g (selectArg [n1,n2]) is
+  FreeNode           -> error "followPath: FreeNode"
  where
   selectArg ns | i >= length ns = error "followPath: argument does not exist!"
                | otherwise      = ns !! i
@@ -445,9 +472,12 @@ extendGraph g0 env (IVar v) = (g0, Left $ lookupInEnv v env)
 extendGraph g0 env (IVarAccess v path) =
   (g0, Left $ followPath g0 (lookupInEnv v env) path)
 extendGraph g0 _ (ILit l) = (g0, Right $ ConsNode (showILit l) [])
-extendGraph g0 env (IFCall (_,c,_) es) =
-  let (g1,ns) = extendGraphL g0 env es
-  in (g1, Right $ FuncNode c ns)
+extendGraph g0 env (IFCall (mn,c,_) es)
+ | mn == "Prelude" && c == "unknown" && null es
+ = (g0, Right FreeNode)
+ | otherwise
+ = let (g1,ns) = extendGraphL g0 env es
+   in (g1, Right $ FuncNode c ns)
 extendGraph g0 env (ICCall (_,c,_) es) =
   let (g1,ns) = extendGraphL g0 env es
   in (g1, Right $ ConsNode c ns)
@@ -457,9 +487,9 @@ extendGraph g0 env (IFPCall (_,c,_) m es) =
 extendGraph g0 env (ICPCall (_,c,_) m es) =
   let (g1,ns) = extendGraphL g0 env es
   in (g1, Right $ PartNode c (PartConsCall m) ns)
-extendGraph g0@(Graph _ m) env (IOr e1 e2) =
+extendGraph g0 env (IOr e1 e2) =
   let (g1,[n1,n2]) = extendGraphL g0 env [e1,e2]
-  in (g1, Right $ ChoiceNode m n1 n2) -- TODO: better choice ids
+  in (g1, Right $ ChoiceNode (maxNodeID g1) n1 n2) -- TODO: better choice ids
 
 extendGraphL :: Graph -> IEnv -> [IExpr] -> (Graph,[NodeID])
 extendGraphL g0 _ [] = (g0,[])
@@ -469,13 +499,18 @@ extendGraphL g0 env (e:es) =
       (g3,ns) = extendGraphL g2 env es
   in (g3, n:ns)
 
--- Shows a literal as a string.
+-- Shows a literal as a string. Used in the interpreter to avoid
+-- specific graph nodes for literal values.
 showILit :: ILiteral -> String
 showILit (IInt   n) = show n
 showILit (IChar  c) = show c
 showILit (IFloat f) = show f
 
 ------------------------------------------------------------------------------
+-- The following operations retrieves some static information of programs.
+-- In principle, they can be evaluated at compile time.
+-- Since efficiency is not the objective of this interpreter,
+-- we compute everything at run time.
 
 -- Returns the function with a given (unqualified) name.
 funcOf :: String -> [IFunction] -> IFunction
@@ -483,9 +518,11 @@ funcOf fn [] = error $ "Function '" ++ fn ++ "' not found!"
 funcOf fn (fd@(IFunction (_,f,_) _ _ _ _) : funs) =
    if fn==f then fd else funcOf fn funs
 
+-- Returns the body of a given function name.
 bodyOf :: String -> [IFunction] -> IFuncBody
 bodyOf fn prog = let IFunction _ _ _ _ b = funcOf fn prog in b
 
+-- Returns the demanded argument of a given function name.
 demandOf :: String -> [IFunction] -> Maybe Int
 demandOf fn prog = case d of
   []  -> Nothing
@@ -494,6 +531,27 @@ demandOf fn prog = case d of
                  "' has more than one demanded argument (not yet supported)"
  where
   IFunction _ _ _ d _ = funcOf fn prog
+
+-- Computes an expression representing the choice structure demanded
+-- by the function of the given node id.
+choiceOfDemand :: State -> NodeID -> Maybe IExpr
+choiceOfDemand st nid =
+  case lookupNode nid (graph st) of
+    FuncNode f _ -> choiceOfBody (bodyOf f (program st))
+    _            -> error "choiceOfDemand: no function node in control"
+ where
+  choiceOfBody (IFuncBody (IBlock _ _ stm)) = choiceOfStmt stm
+  choiceOfBody (IExternal _)                = Nothing
+
+  choiceOfStmt stm = case stm of
+    ICaseCons _ bs ->
+      if null bs
+        then Nothing
+        else Just (foldr1 (\e1 e2 -> IOr e1 e2) (map branchesToConsFree bs))
+    _ -> error "choiceOfDemand: function without constructor demand in control"
+   where
+    branchesToConsFree (IConsBranch c ar _) =
+      ICCall c (map (\_ -> IFCall ("Prelude","unknown",0) []) [1 .. ar])
 
 ------------------------------------------------------------------------------
 -- Some standard functions which are usually defined in the prelude.
@@ -513,6 +571,14 @@ funSeq = IFunction ("Prelude","seq",0) 2 Public [0] $ IFuncBody $
 funDollarBang :: IFunction
 funDollarBang = IFunction ("Prelude","$!",0) 2 Public [1] (IExternal "$!")
 
+-- f $$! x = f (id $! x), i.e., first f and then x is demanded, returns (f x).
+-- Used for computations of normal forms with left to right argument evaluation.
+funDollarDollarBang :: IFunction
+funDollarDollarBang = IFunction ("Prelude","$$!",0) 2 Public [0] $ IFuncBody $
+  IBlock [IVarDecl 1,IVarDecl 2]
+         [IVarAssign 1 (IVarAccess 0 [0]),IVarAssign 2 (IVarAccess 0 [1])]
+         (IReturn (IFCall ("Prelude","$!",0) [IVar 1, IVar 2]))
+
 -- f $# x: demands x and returns (f x) (and suspends on a free variable
 -- which is not yet implemented)
 funDollarHash :: IFunction
@@ -524,6 +590,8 @@ funNormalForm =
   IFunction ("Prelude","normalForm",0) 1 Public [0] (IExternal "normalForm")
 
 standardFuncs :: [IFunction]
-standardFuncs = [funApply, funSeq, funDollarBang, funDollarHash, funNormalForm]
+standardFuncs =
+  [ funApply, funSeq, funDollarBang, funDollarDollarBang
+  , funDollarHash, funNormalForm ]
 
 ------------------------------------------------------------------------------
