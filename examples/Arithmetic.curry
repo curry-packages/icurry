@@ -22,8 +22,7 @@ prim_Int_mult external
 ------------------------------------------------------------------------------
 -- Combining arithmetic and non-determinism:
 coin :: Int
-coin = 0
-coin = 1
+coin = 0 ? 1
 
 coinCoin = coin + coin
 

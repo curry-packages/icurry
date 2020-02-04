@@ -22,6 +22,14 @@ These tools are available in the `icurry` binary installed
 with this package.
 
 
+Important note:
+---------------
+
+Translated ICurry programs have the suffix `icy`.
+The suffix `icurry` is already used by the front end
+for *interface files* of Curry programs.
+
+
 Usage:
 ------
 
@@ -38,7 +46,9 @@ In the following, we describe various uses of the `icurry` tool.
        > icurry Prog
 
    This will generate the file `.curry/Prog.icy`, i.e., the suffix `icy`
-   is used for generated ICurry programs.
+   is used for generated ICurry programs. If the program is located
+   in a non-local directory, the generated file is placed relative
+   to the directory of the source program.
 
    In order to see a human-readable presentation of the generated program,
    use option `-v`, i.e.,

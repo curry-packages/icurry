@@ -40,9 +40,9 @@ mainProg opts p = do
   let imain = optMain opts
   if null imain
     then do
-      writeICurryFile (iCurryFileName p) iprog
-      printStatus opts $
-        "ICurry program written to '" ++ iCurryFileName p ++ "'"
+      icyname <- iCurryFilePath p
+      writeICurryFile icyname iprog
+      printStatus opts $ "ICurry program written to '" ++ icyname ++ "'"
     else do
       printStatus opts $ "Executing main function '" ++ imain ++ "'..."
       let opts1 = if optShowGraph opts

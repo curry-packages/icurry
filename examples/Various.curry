@@ -15,8 +15,7 @@ xor True  y = not y
 
 xorSelf x = xor x x
 
-aBool = False
-aBool = True
+aBool = False ? True
 
 xorSelfBool = xorSelf aBool
 

@@ -1,9 +1,12 @@
 -- Testing infinitely many results
 
-aBool = False
-aBool = True
+aBool :: Bool
+aBool = False ? True
 
+aBoolList :: [Bool]
 aBoolList = []
 aBoolList = aBool : aBoolList
 
+-- infinitely many values: use option --interactive
+main :: [Bool]
 main = normalForm aBoolList

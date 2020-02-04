@@ -6,7 +6,7 @@
 --- * remove declarations/assignments of unused variables in ICurry code
 ---
 --- @author Michael Hanus
---- @version January 2020
+--- @version February 2020
 ------------------------------------------------------------------------------
 
 module ICurry.Compiler where
@@ -177,7 +177,7 @@ toIBlock opts vs e root =
             Case _ ce brs@(Branch (LPattern _ ) _ : _) ->
               let carg = trCaseArg ce
               in ICaseLit carg (map (trLBranch carg) brs)
-            Comb FuncCall fn [] | fn == ("Prelude","failed") -> IExempt
+            Comb FuncCall fn [] | fn == pre "failed" -> IExempt
             _ -> IReturn (toIExpr opts e))
  where
   varDecls = case e of
@@ -223,13 +223,16 @@ toIBlock opts vs e root =
 toIExpr :: ICOptions -> Expr -> IExpr
 toIExpr _ (Var v) = IVar v
 toIExpr _ (Lit l) = ILit (trLit l)
-toIExpr opts (Comb ct qn@(mn,fn) es) =
-  let icall = case ct of
-                FuncCall       -> IFCall  (mn, fn, posOfFun opts qn)
-                ConsCall       -> ICCall  (mn, fn, posOfCons opts qn)
-                FuncPartCall m -> IFPCall (mn, fn, posOfFun opts qn) m
-                ConsPartCall m -> ICPCall (mn, fn, posOfCons opts qn) m
-  in icall (map (toIExpr opts) es)
+toIExpr opts (Comb ct qn@(mn,fn) es)
+ | qn == pre "?" && length es == 2
+ = toIExpr opts (Or (es!!0) (es!!1))
+ | otherwise
+ = let icall = case ct of
+                 FuncCall       -> IFCall  (mn, fn, posOfFun opts qn)
+                 ConsCall       -> ICCall  (mn, fn, posOfCons opts qn)
+                 FuncPartCall m -> IFPCall (mn, fn, posOfFun opts qn) m
+                 ConsPartCall m -> ICPCall (mn, fn, posOfCons opts qn) m
+   in icall (map (toIExpr opts) es)
 toIExpr opts (Or e1 e2)   = IOr (toIExpr opts e1) (toIExpr opts e2)
 toIExpr opts (Typed e _)  = toIExpr opts e
 toIExpr opts (Let _ e)    = toIExpr opts e
@@ -259,5 +262,11 @@ showIProg :: IProg -> String
 showIProg (IProg mn imps types funs) = unlines $
   unwords ["IProg", mn, show imps, show types] :
   "[" : map show funs ++ ["]"]
+
+------------------------------------------------------------------------------
+-- Auxiliaries:
+
+pre :: String -> QName
+pre s = ("Prelude", s)
 
 ------------------------------------------------------------------------------
