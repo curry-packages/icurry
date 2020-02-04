@@ -12,7 +12,6 @@ module ICurry.Interpreter
 
 import List   ( init, isPrefixOf, last, replace )
 import System ( sleep, system )
-import Unsafe
 
 import ICurry.Types
 import ICurry.Graph
