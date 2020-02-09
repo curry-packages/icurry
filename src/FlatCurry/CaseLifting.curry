@@ -20,11 +20,20 @@ import FlatCurry.Types
 ------------------------------------------------------------------------------
 --- Options for case/let/free lifting.
 data LiftOptions = LiftOptions
-  { currFun :: QName -- name of current function to be lifted
+  { liftCase :: Bool -- lift nested cases?
+  , liftCArg :: Bool -- lift non-variable case arguments?
+  , liftLet  :: Bool -- lift nested lets?
+  , liftFree :: Bool -- lift nested free declarations?
+  , currFun  :: QName -- name of current function to be lifted (internally used)
   }
 
-defaultOpts :: LiftOptions
-defaultOpts = LiftOptions ("","")
+--- Default options for lifting all nested case/let/free expressions.
+defaultLiftOpts :: LiftOptions
+defaultLiftOpts = LiftOptions True True True True ("","")
+
+--- Default options for lifting no nested case/let/free expression.
+defaultNoLiftOpts :: LiftOptions
+defaultNoLiftOpts = LiftOptions False False False False ("","")
 
 -- Add suffix to case function
 addSuffix2Fun :: LiftOptions -> String -> LiftOptions
@@ -59,21 +68,20 @@ liftExp opts _ (Comb ct qn es) =
   let (nes,nfs) = unzip (map (\ (n,e) -> liftExpArg opts n e) (zip [1..] es))
   in (Comb ct qn nes, concat nfs)
 
-liftExp opts lft exp@(Case ct e brs) = case e of
-  Var _ -> liftCaseExp lft
-  _     -> liftCaseArg
+liftExp opts nested exp@(Case ct e brs) = case e of
+  Var _ -> liftCaseExp
+  _     -> if liftCArg opts then liftCaseArg else liftCaseExp
  where
-  liftCaseExp False =
-    let (ne, nefs) = liftExpArg opts 0 e
-        (nbrs, nfs) = unzip (map (liftBranch opts) (zip [1..] brs))
-    in (Case ct ne nbrs, nefs ++ concat nfs)
-  -- lift case expression by creating new function call:
-  liftCaseExp True =
-    let vs       = unboundVars exp
-        cfn      = currFun (addSuffix2Fun opts "$CASE")
-        noneType = TCons ("Prelude","None") []
-        caseFunc = Func cfn (length vs) Private noneType (Rule vs exp)
-    in (Comb FuncCall cfn (map Var vs), liftFun opts caseFunc)
+  liftCaseExp =
+    if nested && liftCase opts -- lift case expression by creating new function
+      then let vs       = unboundVars exp
+               cfn      = currFun (addSuffix2Fun opts "$CASE")
+               noneType = TCons ("Prelude","None") []
+               caseFunc = Func cfn (length vs) Private noneType (Rule vs exp)
+           in (Comb FuncCall cfn (map Var vs), liftFun opts caseFunc)
+      else let (ne, nefs) = liftExpArg opts 0 e
+               (nbrs, nfs) = unzip (map (liftBranch opts) (zip [1..] brs))
+           in (Case ct ne nbrs, nefs ++ concat nfs)
 
   -- lift case with complex (non-variable) case argument:
   liftCaseArg =
@@ -86,35 +94,36 @@ liftExp opts lft exp@(Case ct e brs) = case e of
                           (Rule (vs ++ [casevar]) (Case ct (Var casevar) brs))
     in (Comb FuncCall cfn (map Var vs ++ [ne]), nefs ++ liftFun opts caseFunc)
 
-liftExp opts False (Let bs e) =
-  let (nes,nfs1) = unzip (map (\ (n,be) -> liftExpArg opts n be)
-                         (zip [1..] (map snd bs)))
-      (ne,nfs2)  = liftExpArg opts 0 e
-  in (Let (zip (map fst bs) nes) ne, concat nfs1 ++ nfs2)
--- lift let expression by creating new function call:
-liftExp opts True exp@(Let _ _) =
-  let vs       = unboundVars exp
-      cfn      = currFun (addSuffix2Fun opts "$LET")
-      noneType = TCons ("Prelude","None") []
-      letFunc  = Func cfn (length vs) Private noneType (Rule vs exp)
-  in (Comb FuncCall cfn (map Var vs), liftFun opts letFunc)
+liftExp opts nested exp@(Let bs e)
+ | nested && liftLet opts -- lift let expression by creating new function
+ = let vs       = unboundVars exp
+       cfn      = currFun (addSuffix2Fun opts "$LET")
+       noneType = TCons ("Prelude","None") []
+       letFunc  = Func cfn (length vs) Private noneType (Rule vs exp)
+   in (Comb FuncCall cfn (map Var vs), liftFun opts letFunc)
+ | otherwise
+ = let (nes,nfs1) = unzip (map (\ (n,be) -> liftExpArg opts n be)
+                          (zip [1..] (map snd bs)))
+       (ne,nfs2)  = liftExpArg opts 0 e
+   in (Let (zip (map fst bs) nes) ne, concat nfs1 ++ nfs2)
 
-liftExp opts False (Free vs e) =
-  let (ne, nfs) = liftExp opts True e
-  in (Free vs ne, nfs)
-liftExp opts True exp@(Free _ _) =
-  let vs       = unboundVars exp
-      cfn      = currFun (addSuffix2Fun opts "$FREE")
-      noneType = TCons ("Prelude","None") []
-      freeFunc = Func cfn (length vs) Private noneType (Rule vs exp)
-  in (Comb FuncCall cfn (map Var vs), liftFun opts freeFunc)
+liftExp opts nested exp@(Free vs e)
+ | nested && liftFree opts -- lift free declaration by creating new function
+ = let fvs      = unboundVars exp
+       cfn      = currFun (addSuffix2Fun opts "$FREE")
+       noneType = TCons ("Prelude","None") []
+       freeFunc = Func cfn (length fvs) Private noneType (Rule fvs exp)
+   in (Comb FuncCall cfn (map Var fvs), liftFun opts freeFunc)
+ | otherwise
+ = let (ne, nfs) = liftExp opts True e
+   in (Free vs ne, nfs)
 
 liftExp opts _ (Or e1 e2) =
   let (ne1, nfs1) = liftExpArg opts 1 e1
       (ne2, nfs2) = liftExpArg opts 2 e2
   in (Or ne1 ne2, nfs1 ++ nfs2)
-liftExp opts lft (Typed e te) =
-  let (ne, nfs) = liftExp opts lft e
+liftExp opts nested (Typed e te) =
+  let (ne, nfs) = liftExp opts nested e
   in (Typed ne te, nfs)
 
 -- Lift an argument of an expression so that the argument number

@@ -42,7 +42,7 @@ data IDataType = IDataType IQName [(IQName,IArity)]
   deriving (Show, Read)
 
 --- An ICurry function declaration consisting of the function's name, arity,
---- the positions of demandeded arguments (0 = first argument),
+--- the positions of always demandeded arguments (0 = first argument),
 --- and a body.
 data IFunction = IFunction IQName IArity IVisibility [Int] IFuncBody
   deriving (Show, Read)

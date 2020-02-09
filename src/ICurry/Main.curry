@@ -18,11 +18,19 @@ import ICurry.Files
 import ICurry.Interpreter
 import ICurry.Types
 
+test :: String -> IO ()
+test p = mainProg defaultICOptions { optVerb = 3, optMain = "main" } p
+
+testI :: String -> IO ()
+testI p =
+  mainProg defaultICOptions { optVerb = 3, optMain = "main"
+                            , optShowGraph = True, optInteractive = True } p
+
 ------------------------------------------------------------------------------
 banner :: String
 banner = unlines [bannerLine,bannerText,bannerLine]
  where
-   bannerText = "ICurry Compiler (Version of 03/02/20)"
+   bannerText = "ICurry Compiler (Version of 09/02/20)"
    bannerLine = take (length bannerText) (repeat '=')
 
 main :: IO ()
@@ -65,14 +73,15 @@ processOptions argv = do
   unless (null opterrors)
          (putStr (unlines opterrors) >> printUsage >> exitWith 1)
   when (optHelp opts) (printUsage >> exitWith 0)
+  when (not (null (optMain opts)) && not (optLift opts)) $ error
+    "Incompatible options: nested case/let must be lifted for the interpreter"
   return (opts, map stripCurrySuffix args)
  where
   printUsage = putStrLn (banner ++ "\n" ++ usageText)
 
 -- Help text
 usageText :: String
-usageText =
-  usageInfo ("Usage: icurry [options] <module name>\n") options
+usageText = usageInfo ("Usage: icurry [options] <module name>\n") options
 
 -- Definition of actual command line options.
 options :: [OptDescr (ICOptions -> ICOptions)]
@@ -98,6 +107,9 @@ options =
   , Option "i" ["interactive"]
            (NoArg (\opts -> opts { optInteractive = True }))
            "interactive execution (ask after each result or step)"
+  , Option "" ["nolifting"]
+           (NoArg (\opts -> opts { optLift = False }))
+           "do not lift nested case/let expressions"
   ]
  where
   safeReadNat opttrans s opts =

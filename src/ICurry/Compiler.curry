@@ -13,18 +13,18 @@ module ICurry.Compiler where
 
 import List              ( elemIndex, maximum )
 
-import FlatCurry.Files
+import FlatCurry.Files   ( readFlatCurry )
 import FlatCurry.Goodies ( allVars, consName, funcName, funcVisibility
                          , progFuncs, progImports, progTypes )
-import FlatCurry.Pretty
+import FlatCurry.Pretty  ( defaultOptions, ppProg )
 import FlatCurry.Types
-import Text.Pretty
+import Text.Pretty       ( pPrint )
 
 import FlatCurry.CaseCompletion
-import FlatCurry.CaseLifting
+import FlatCurry.CaseLifting ( defaultLiftOpts, defaultNoLiftOpts, liftProg )
 
-import ICurry.Files
-import ICurry.Pretty
+import ICurry.Files  ( iCurryFileName, writeICurryFile )
+import ICurry.Pretty ( ppIProg )
 import ICurry.Types
 
 test :: String -> IO ()
@@ -45,7 +45,9 @@ icCompile opts p = do
   impprogs <- mapM readFlatCurry impmods
   let datadecls = concatMap dataDeclsOf (prog : impprogs)
       ccprog    = completeProg (CaseOptions datadecls) prog
-      clprog    = liftProg defaultOpts ccprog
+      clprog    = if optLift opts
+                    then liftProg defaultLiftOpts ccprog
+                    else liftProg defaultNoLiftOpts ccprog
   printDetails opts $ 
     textWithLines "Transformed FlatCurry program to be compiled:" ++
     pPrint (ppProg FlatCurry.Pretty.defaultOptions clprog)
@@ -87,19 +89,22 @@ icCompile opts p = do
 --- Contains mappings from constructor and functions names
 --- into locally unique integers and other stuff.
 data ICOptions = ICOptions
-  { optVerb      :: Int    -- verbosity (0: quiet, 1: status, 2: interm, 3: all)
-  , optHelp      :: Bool   -- if help info should be printed
-  , optMain      :: String -- name of main function
-  , optShowGraph :: Bool   -- visualize graph during execution?
-  , optViewPDF   :: String -- command to view graph PDF
+  { optVerb        :: Int    -- verbosity
+                             -- (0: quiet, 1: status, 2: intermediate, 3: all)
+  , optHelp        :: Bool   -- if help info should be printed
+  , optLift        :: Bool   -- should nested cases/lets be lifted to top-level?
+  , optMain        :: String -- name of main function
+  , optShowGraph   :: Bool   -- visualize graph during execution?
+  , optViewPDF     :: String -- command to view graph PDF
   , optInteractive :: Bool   -- interactive execution?
+  -- internal options
   , optConsMap   :: [(QName,(IArity,Int))] -- map: cons. names to arity/position
   , optFunMap    :: [(QName,Int)]       -- map: function names to module indices
   , optFun       :: QName  -- currently compiled function
   }
 
 defaultICOptions :: ICOptions
-defaultICOptions = ICOptions 1 False "" False "evince" False [] [] ("","")
+defaultICOptions = ICOptions 1 False True "" False "evince" False [] [] ("","")
 
 -- Lookup arity and position index of a constructor.
 arityPosOfCons :: ICOptions -> QName -> (IArity,Int)
