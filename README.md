@@ -55,6 +55,13 @@ In the following, we describe various uses of the `icurry` tool.
    
        > icurry -v Prog
 
+   As a default, the ICurry compiler lifts all nested case/let expressions,
+   i.e., it transforms them into auxiliary top-level operations.
+   This is also necessary for the simple interpreter contained in this
+   package (see below).
+   If an implementation of ICurry can deal with nested case/let expressions,
+   one can use the option `--nolifting` to supress this lifting.
+
 2. One can also use a simple (i.e., not efficient) interpreter
    to execute ICurry programs and visualize their behavior.
    In this case, one has to provide the name of a 0-ary function `mymain`

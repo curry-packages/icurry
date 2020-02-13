@@ -30,7 +30,7 @@ testI p =
 banner :: String
 banner = unlines [bannerLine,bannerText,bannerLine]
  where
-   bannerText = "ICurry Compiler (Version of 09/02/20)"
+   bannerText = "ICurry Compiler (Version of 13/02/20)"
    bannerLine = take (length bannerText) (repeat '=')
 
 main :: IO ()
@@ -74,7 +74,7 @@ processOptions argv = do
          (putStr (unlines opterrors) >> printUsage >> exitWith 1)
   when (optHelp opts) (printUsage >> exitWith 0)
   when (not (null (optMain opts)) && not (optLift opts)) $ error
-    "Incompatible options: nested case/let must be lifted for the interpreter"
+    "Incompatible options: interpreter requires case/let lifting!"
   return (opts, map stripCurrySuffix args)
  where
   printUsage = putStrLn (banner ++ "\n" ++ usageText)
@@ -106,7 +106,7 @@ options =
            "command to view PDF files (default: 'evince')"
   , Option "i" ["interactive"]
            (NoArg (\opts -> opts { optInteractive = True }))
-           "interactive execution (ask after each result or step)"
+           "interactive execution (ask after each step/result)"
   , Option "" ["nolifting"]
            (NoArg (\opts -> opts { optLift = False }))
            "do not lift nested case/let expressions"

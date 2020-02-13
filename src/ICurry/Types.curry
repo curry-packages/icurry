@@ -41,9 +41,12 @@ data IProg = IProg String [String] [IDataType] [IFunction]
 data IDataType = IDataType IQName [(IQName,IArity)]
   deriving (Show, Read)
 
---- An ICurry function declaration consisting of the function's name, arity,
---- the positions of always demandeded arguments (0 = first argument),
---- and a body.
+--- An ICurry function declaration consisting of the function's name,
+--- arity, visibility, the positions of always demandeded arguments
+--- (where 0 denotes the first argument), and a body.
+--- Note that the demanded arguments are definitely required to
+--- evaluate the function. In some situations (e.g., complex nested case
+--- statements), more arguments might be demanded.
 data IFunction = IFunction IQName IArity IVisibility [Int] IFuncBody
   deriving (Show, Read)
 
@@ -71,12 +74,13 @@ data IBlock = IBlock [IVarDecl] [IAssign] IStatement
 --- In the subsequent assignments, graph nodes will be assigned to
 --- these variables. Instead of explicitly handling free variables,
 --- one could also use local variables and assign a node representing
---- a value generator operation. Since different implementations
---- might you different strategies to deal with free variables,
---- ICurry supports both options.
+--- a value generator operation for this free variable.
+--- Since different implementations might use different strategies
+--- to deal with free variables, ICurry supports both options.
 ---
---- NOTE: The ICurry variable with index 0 always points to the root
---- of the left-hand side when an ICurry function is invoked.
+--- NOTE: The ICurry code assumes that the ICurry variable with index 0
+--- always points to the root of the left-hand side when an ICurry function
+--- is invoked. This invariant must be ensured by the ICurry application!
 data IVarDecl = IVarDecl  IVarIndex
               | IFreeDecl IVarIndex
   deriving (Show, Read)

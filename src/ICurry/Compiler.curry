@@ -157,14 +157,12 @@ trFunc opts (Func qn@(mn,fn) ar vis _ rule) =
  where
   optsf = opts { optFun = qn }
 
-  demandOf (External _) = [] -- TODO
-  demandOf (Rule args rhs) = case rhs of
-    Case _ ce _ -> case ce of
-      Var v -> maybe (funError optsf "case variable not in left-hand side")
-                     (\i -> [i])
-                     (elemIndex v args)
-      _     -> []
-    _ -> []
+-- Computes (approximates) the arguments demanded by a rule.
+demandOf :: Rule -> [Int]
+demandOf (External _) = [] -- TODO
+demandOf (Rule args rhs) = case rhs of
+  Case _ (Var v) _ -> maybe [] (: []) (elemIndex v args)
+  _                -> []
 
 trRule :: ICOptions -> Rule -> IFuncBody
 trRule _ (External s) = IExternal s
