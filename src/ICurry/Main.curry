@@ -30,7 +30,7 @@ testI p =
 banner :: String
 banner = unlines [bannerLine,bannerText,bannerLine]
  where
-   bannerText = "ICurry Compiler (Version of 13/02/20)"
+   bannerText = "ICurry Compiler (Version of 19/02/20)"
    bannerLine = take (length bannerText) (repeat '=')
 
 main :: IO ()
