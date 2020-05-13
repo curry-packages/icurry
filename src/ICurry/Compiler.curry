@@ -170,9 +170,9 @@ trRule opts (Rule args rhs) = IFuncBody (toIBlock opts args rhs 0)
 
 toIBlock :: ICOptions -> [VarIndex] -> Expr -> Int -> IBlock
 toIBlock opts vs e root =
-  IBlock (map IVarDecl vs ++ varDecls)
-         (map (\ (p,i) -> IVarAssign i (IVarAccess root [p])) (zip [0..] vs) ++
-          varAssigns)
+  IBlock (map IVarDecl (filter (`elem` evars) vs) ++ varDecls)
+         (map (\ (p,i) -> IVarAssign i (IVarAccess root [p]))
+              (filter ((`elem` evars) . snd) (zip [0..] vs)) ++ varAssigns)
          (case e of
             Case _ ce brs@(Branch (Pattern _ _) _ : _) ->
               let carg = trCaseArg ce
@@ -183,6 +183,8 @@ toIBlock opts vs e root =
             Comb FuncCall fn [] | fn == pre "failed" -> IExempt
             _ -> IReturn (toIExpr opts e))
  where
+  evars = allVars e
+
   varDecls = case e of
                Free fvs _       -> map IFreeDecl fvs
                Let bs   _       -> map (IVarDecl .fst) bs
@@ -191,7 +193,7 @@ toIBlock opts vs e root =
                _                -> []
 
   -- fresh variable to translate complex case arguments:
-  caseVar = maximum (0 : allVars e) + 1
+  caseVar = maximum (0 : evars) + 1
 
   varAssigns = case e of
                  Let bs _ ->

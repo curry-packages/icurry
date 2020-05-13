@@ -7,7 +7,7 @@
 
 module ICurry.Pretty where
 
-import List ( intersperse )
+import List ( intercalate, intersperse )
 
 import ICurry.Types
 import Text.Pretty
@@ -76,7 +76,12 @@ ppFunctions = vsepBlank . map ppFunction
 --- @param fns the function
 --- @return    the pretty printed function
 ppFunction :: IFunction -> Doc
-ppFunction (IFunction name _ _ _ body) = ppQName name <+> ppFuncBody body
+ppFunction (IFunction name ar _ demargs body) =
+  ppQName name <> char '/' <> int ar <>
+  (if null demargs
+     then empty
+     else text (" (DEMANDED: " ++ intercalate "," (map show demargs) ++ ")"))
+  <+> char ':' <+> ppFuncBody body
 
 --- Pretty print a qualified ICurry name (module.localname)
 --- @param name the name
@@ -88,8 +93,8 @@ ppQName (modname, localname, _) = text $ modname ++ '.' : localname
 --- @param body the function's body
 --- @return     the pretty printed function body
 ppFuncBody :: IFuncBody -> Doc
-ppFuncBody (IExternal name) = text ("external \"" ++ name ++ "\",")
-ppFuncBody (IFuncBody block) = equals <+> ppBlock block
+ppFuncBody (IExternal name)  = text ("external \"" ++ name ++ "\",")
+ppFuncBody (IFuncBody block) = ppBlock block
 
 --- Pretty print a list of variables
 --- @param vs the variables
