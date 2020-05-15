@@ -9,7 +9,7 @@ The definition of ICurry is inspired by the Curry compiler
 [Sprite](http://dx.doi.org/10.1007/978-3-319-63139-4_6)
 which compiles Curry programs into LLVM code.
 The definition of ICurry implemented in this package follows the
-[paper on ICurry](http://arxiv.org/abs/1908.11101).
+[paper on ICurry](http://dx.doi.org/10.1007/978-3-030-46714-2_18).
 
 This package contains the definition of ICurry as
 Curry data types (module `ICurry.Types`), a simple compiler
@@ -55,13 +55,6 @@ In the following, we describe various uses of the `icurry` tool.
    
        > icurry -v Prog
 
-   As a default, the ICurry compiler lifts all nested case/let expressions,
-   i.e., it transforms them into auxiliary top-level operations.
-   This is also necessary for the simple interpreter contained in this
-   package (see below).
-   If an implementation of ICurry can deal with nested case/let expressions,
-   one can use the option `--nolifting` to supress this lifting.
-
 2. One can also use a simple (i.e., not efficient) interpreter
    to execute ICurry programs and visualize their behavior.
    In this case, one has to provide the name of a 0-ary function `mymain`
@@ -98,6 +91,33 @@ In the following, we describe various uses of the `icurry` tool.
 
     More executions options are available by invoking the interpreter
     manually via the operation `ICurry.Interpreter.execProg`.
+
+
+Explanation of some options:
+----------------------------
+
+`--nolifting`:
+
+As a default, the ICurry compiler lifts all nested case/let expressions,
+i.e., it transforms them into auxiliary top-level operations.
+This is also necessary for the simple interpreter contained in this
+package (see below).
+If an implementation of ICurry can deal with nested case/let expressions,
+one can use the option `--nolifting` to supress this lifting.
+
+`--optvardecls`:
+
+The ICurry compiler generates declaration (`IVarDecl`)
+for each variable used in a block in order to support cyclic
+data structures (see the paper on ICurry).
+For imperative target languages that do not require explicit
+variables declaration but allow the introduction of variables
+by assignments (see type `IAssign`), one can use the
+option `--optvardecls` to suppress the generation of variable
+declarations when they are introduced by assignments.
+With this options, variable declarations are only generated
+for variables which have their first occurrence in an expression
+(which is the case when cyclic data structures are used).
 
 
 Some remarks about the ICurry interpreter:

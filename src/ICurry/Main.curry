@@ -30,7 +30,7 @@ testI p =
 banner :: String
 banner = unlines [bannerLine,bannerText,bannerLine]
  where
-   bannerText = "ICurry Compiler (Version of 12/05/20)"
+   bannerText = "ICurry Compiler (Version of 15/05/20)"
    bannerLine = take (length bannerText) (repeat '=')
 
 main :: IO ()
@@ -110,6 +110,9 @@ options =
   , Option "" ["nolifting"]
            (NoArg (\opts -> opts { optLift = False }))
            "do not lift nested case/let expressions"
+  , Option "" ["optvardecls"]
+           (NoArg (\opts -> opts { optVarDecls = True }))
+           "do not generate variable declarations when\nvariables are introduced by assignments"
   ]
  where
   safeReadNat opttrans s opts =

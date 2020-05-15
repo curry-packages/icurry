@@ -156,7 +156,7 @@ ppAssignments = vcat . map ppAssignment
 ppAssignment :: IAssign -> Doc
 ppAssignment (IVarAssign v e) = ppVar v <+> equals <+> ppExpr e
 ppAssignment (INodeAssign v pos e) =
-  ppVar v <+> ppPos pos <+> equals <+> ppExpr e
+  ppVar v <> ppPos pos <+> equals <+> ppExpr e
 
 --- Pretty print comma separated expressions
 --- @param exprs the expressions
@@ -168,15 +168,14 @@ ppExprs = hsep . punctuate comma . map ppExpr
 --- @param expr the expression
 --- @return     the pretty printed expression
 ppExpr :: IExpr -> Doc
-ppExpr (IVar v)      = ppVar v
-ppExpr (IVarAccess v pos) = ppVar v <+> ppPos pos
-ppExpr (ILit l)      = ppLit l
-ppExpr (IFCall n es) = ppQName n <+> lparen <+> ppExprs es <+> rparen
-ppExpr (ICCall n es) = ppExpr (IFCall n es)
-ppExpr (IFPCall n _ es) = ppQName n <+> lparen <+> ppExprs es <+> rparen
-ppExpr (ICPCall n m es) = ppExpr (IFPCall n m es)
-ppExpr (IOr e1 e2)   =
-  lparen <+> ppExpr e1 <+> char '?' <+> ppExpr e2 <+> rparen
+ppExpr (IVar v)           = ppVar v
+ppExpr (IVarAccess v pos) = ppVar v <> ppPos pos
+ppExpr (ILit l)           = ppLit l
+ppExpr (IFCall n es)      = ppQName n <> parens (ppExprs es)
+ppExpr (ICCall n es)      = ppExpr (IFCall n es)
+ppExpr (IFPCall n _ es)   = ppQName n <> parens (ppExprs es)
+ppExpr (ICPCall n m es)   = ppExpr (IFPCall n m es)
+ppExpr (IOr e1 e2)        = parens (ppExpr e1 <+> char '?' <+> ppExpr e2)
 
 --- Pretty print branches over constructors
 --- @param bs the branches

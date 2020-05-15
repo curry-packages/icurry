@@ -6,7 +6,7 @@
 --- * remove declarations/assignments of unused variables in ICurry code
 ---
 --- @author Michael Hanus
---- @version February 2020
+--- @version May 2020
 ------------------------------------------------------------------------------
 
 module ICurry.Compiler where
@@ -97,6 +97,7 @@ data ICOptions = ICOptions
   , optShowGraph   :: Bool   -- visualize graph during execution?
   , optViewPDF     :: String -- command to view graph PDF
   , optInteractive :: Bool   -- interactive execution?
+  , optVarDecls    :: Bool   -- optimize variable declarations?
   -- internal options
   , optConsMap   :: [(QName,(IArity,Int))] -- map: cons. names to arity/position
   , optFunMap    :: [(QName,Int)]       -- map: function names to module indices
@@ -104,7 +105,8 @@ data ICOptions = ICOptions
   }
 
 defaultICOptions :: ICOptions
-defaultICOptions = ICOptions 1 False True "" False "evince" False [] [] ("","")
+defaultICOptions =
+  ICOptions 1 False True "" False "evince" False False [] [] ("","")
 
 -- Lookup arity and position index of a constructor.
 arityPosOfCons :: ICOptions -> QName -> (IArity,Int)
@@ -170,9 +172,12 @@ trRule opts (Rule args rhs) = IFuncBody (toIBlock opts args rhs 0)
 
 toIBlock :: ICOptions -> [VarIndex] -> Expr -> Int -> IBlock
 toIBlock opts vs e root =
-  IBlock (map IVarDecl (filter (`elem` evars) vs) ++ varDecls)
+  IBlock (if optVarDecls opts
+            then varDecls
+            else map IVarDecl (filter (`elem` evars) vs) ++ varDecls)
          (map (\ (p,i) -> IVarAssign i (IVarAccess root [p]))
-              (filter ((`elem` evars) . snd) (zip [0..] vs)) ++ varAssigns)
+              (filter ((`elem` evars) . snd) (zip [0..] vs)) ++
+          fst varAssigns ++ map fst (snd varAssigns))
          (case e of
             Case _ ce brs@(Branch (Pattern _ _) _ : _) ->
               let carg = trCaseArg ce
@@ -186,31 +191,40 @@ toIBlock opts vs e root =
   evars = allVars e
 
   varDecls = case e of
-               Free fvs _       -> map IFreeDecl fvs
-               Let bs   _       -> map (IVarDecl .fst) bs
-               Case _ (Var _) _ -> []
-               Case _ _       _ -> [IVarDecl caseVar]
-               _                -> []
+    Free fvs _       -> map IFreeDecl fvs
+    Let bs   _       -> if optVarDecls opts
+                          then map IVarDecl
+                                   (filter (`elem` cyclicVars) (map fst bs))
+                          else map (IVarDecl . fst) bs
+    Case _ (Var _) _ -> []
+    Case _ _       _ -> if optVarDecls opts then [] else [IVarDecl caseVar]
+    _                -> []
 
   -- fresh variable to translate complex case arguments:
   caseVar = maximum (0 : evars) + 1
 
+  -- the assignments for this block: a pair of direct assignments
+  -- and subsequent assignments required for recursive lets
+  -- (where the cyclic variables is returned)
   varAssigns = case e of
-                 Let bs _ ->
-                   let assigns = map (\ (v,b) -> (v, (toIExpr opts b))) bs
-                   in map (\ (v,be) -> IVarAssign v be) assigns ++
-                      -- add assignments of recursive occurrences:
-                      recursiveAssigns assigns       
-                 Case _ (Var _) _ -> []
-                 Case _ ce      _ -> [IVarAssign caseVar (toIExpr opts ce)]
-                 _                -> []
+    Let bs _ ->
+      let assigns = map (\ (v,b) -> (v, toIExpr opts b)) bs
+      in (map (\ (v,be) -> IVarAssign v be) assigns,
+          -- add assignments of recursive occurrences:
+          recursiveAssigns assigns)
+    Case _ (Var _) _ -> ([], [])
+    Case _ ce      _ -> ([IVarAssign caseVar (toIExpr opts ce)], [])
+    _                -> ([], [])
    where
     recursiveAssigns [] = []
     recursiveAssigns (ve:ves) =
       let vps = varPos [] (snd ve)
-      in map (\ (v,p) -> INodeAssign (fst ve) p (IVar v))
+      in map (\ (v,p) -> (INodeAssign (fst ve) p (IVar v), v))
              (filter (\vp -> fst vp `elem` map fst (ve:ves)) vps) ++
          recursiveAssigns ves
+
+  -- variables used to implement cyclic data structures
+  cyclicVars = map snd (snd varAssigns)
 
   trCaseArg ce = case ce of
                    Var v -> v
