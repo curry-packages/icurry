@@ -2,7 +2,7 @@
 --- This module contains a pretty printer for ICurry programs.
 ---
 --- @author Marc Andre Wittorf and Michael Hanus
---- @version January 2020
+--- @version June 2020
 ------------------------------------------------------------------------------
 
 module ICurry.Pretty where
@@ -194,7 +194,7 @@ ppConsBranch (IConsBranch c ar block) =
 --- @param bs the branches
 --- @return   the pretty printed branches
 ppLitBranches :: [ILitBranch] -> Doc
-ppLitBranches = hsep . map ppLitBranch
+ppLitBranches = vcat . map ppLitBranch
 
 --- Pretty print a branch over literals
 --- @param b the branch
