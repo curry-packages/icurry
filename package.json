@@ -1,16 +1,17 @@
 {
     "name": "icurry",
-    "version": "3.0.0",
+    "version": "3.0.1",
     "author": "Michael Hanus <mh@informatik.uni-kiel.de>",
     "synopsis": "Intermediate format for compiling Curry to imperative languages",
     "category": [ "Metaprogramming" ],
     "license": "BSD-3-Clause",
     "licenseFile": "LICENSE",
     "dependencies": {
-        "base"      : ">= 1.0.0, < 2.0.0",
-        "currypath" : ">= 0.0.1",
-        "flatcurry" : ">= 2.0.0, < 3.0.0",
-        "graphviz"  : ">= 2.0.0, < 3.0.0"
+        "base"         : ">= 1.0.0, < 2.0.0",
+        "currypath"    : ">= 0.0.1",
+        "flatcurry"    : ">= 2.0.0, < 3.0.0",
+        "graphviz"     : ">= 2.0.0, < 3.0.0",
+        "transformers" : ">= 2.0.0"
     },
     "compilerCompatibility": {
         "pakcs": ">= 2.0.0, < 3.0.0",
