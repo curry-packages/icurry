@@ -6,10 +6,13 @@
 --- * remove declarations/assignments of unused variables in ICurry code
 ---
 --- @author Michael Hanus
---- @version May 2020
+--- @version August 2020
 ------------------------------------------------------------------------------
 
-module ICurry.Compiler where
+module ICurry.Compiler
+ ( icCompile, flatCurry2ICurry, ICOptions(..), defaultICOptions
+ , printStatus, printIntermediate )
+ where
 
 import List              ( elemIndex, maximum )
 
@@ -40,6 +43,13 @@ icCompile :: ICOptions -> String -> IO IProg
 icCompile opts p = do
   printStatus opts $ "Reading FlatCurry program '" ++ p ++ "'..."
   prog <- readFlatCurry p
+  flatCurry2ICurry opts prog
+
+--- Translates a FlatCurry program into an ICurry program.
+--- It also reads the imported modules in order to access their
+--- data and function declarations.
+flatCurry2ICurry :: ICOptions -> Prog -> IO IProg
+flatCurry2ICurry opts prog = do
   let impmods = progImports prog
   printStatus opts $ "Reading imported FlatCurry modules: " ++ unwords impmods
   impprogs <- mapM readFlatCurry impmods
@@ -63,21 +73,21 @@ icCompile opts p = do
   printDetails opts (textWithLines "Generated ICurry file:" ++ showIProg icprog)
   return icprog
  where
-  consMapOfProg prog =
+  consMapOfProg fcy =
     concatMap (\ (_,cars) -> map (\ ((cname,car),pos) -> (cname,(car,pos)))
                                  (zip cars [0..]))
-              (dataDeclsOf prog)
+              (dataDeclsOf fcy)
 
   -- compute mapping of public function names to indices
-  publicFunMapOfProg prog =
+  publicFunMapOfProg fcprog =
     zip (map funcName
              (filter (\f -> funcVisibility f == FlatCurry.Types.Public)
-                     (progFuncs prog)))
+                     (progFuncs fcprog)))
         [0..]
 
-  privateFunMapOfProg prog pubfunmap =
+  privateFunMapOfProg fcprog pubfunmap =
     zip (filter (\fn -> fn `notElem` map fst pubfunmap)
-                (map funcName (progFuncs prog)))
+                (map funcName (progFuncs fcprog)))
         [(length pubfunmap) ..]
 
   textWithLines s = unlines [l, s, l]
@@ -111,7 +121,10 @@ defaultICOptions =
 -- Lookup arity and position index of a constructor.
 arityPosOfCons :: ICOptions -> QName -> (IArity,Int)
 arityPosOfCons opts qn =
-  maybe (error "Internal error: posOfCons") id (lookup qn (optConsMap opts))
+  maybe (error $ "Internal error in ICurry.Compiler: arity of " ++
+                 showQName qn ++ " is unknown")
+        id
+        (lookup qn (optConsMap opts))
 
 -- Lookup position index of a constructor.
 posOfCons :: ICOptions -> QName -> Int
@@ -119,7 +132,10 @@ posOfCons opts qn = snd (arityPosOfCons opts qn)
 
 posOfFun :: ICOptions -> QName -> Int
 posOfFun opts qn =
-  maybe (error "Internal error: posOfFun") id (lookup qn (optFunMap opts))
+  maybe (error $ "Internal error in ICurry.Compiler: arity of " ++
+                 showQName qn ++ " is unknown")
+        id
+        (lookup qn (optFunMap opts))
 
 printStatus :: ICOptions -> String -> IO ()
 printStatus opts s = when (optVerb opts > 0) $ putStrLn s
@@ -135,7 +151,7 @@ funError opts err = error $ "Function '" ++ snd (optFun opts) ++ "': " ++ err
 
 ------------------------------------------------------------------------------
 --- Translation from FlatCurry to ICurry according to the transformation
---- specified in the paper.
+--- specified in the ICurry paper.
 flat2icurry :: ICOptions -> Prog -> IProg
 flat2icurry opts (Prog modname imps types funs _) =
   IProg modname imps
@@ -284,6 +300,9 @@ showIProg (IProg mn imps types funs) = unlines $
 
 ------------------------------------------------------------------------------
 -- Auxiliaries:
+
+showQName :: QName -> String
+showQName (mn,fn) = mn ++ "." ++ fn
 
 pre :: String -> QName
 pre s = ("Prelude", s)

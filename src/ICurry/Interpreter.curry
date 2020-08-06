@@ -15,7 +15,7 @@ import System ( sleep, system )
 
 import ICurry.Types
 import ICurry.Graph
-import ICurry.Compiler
+import ICurry.Compiler ( defaultICOptions, icCompile )
 
 ------------------------------------------------------------------------------
 -- The options of the ICurry interpreter.
