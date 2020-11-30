@@ -2,12 +2,14 @@
 --- This module contains a pretty printer for ICurry programs.
 ---
 --- @author Marc Andre Wittorf and Michael Hanus
---- @version June 2020
+--- @version November 2020
 ------------------------------------------------------------------------------
 
 module ICurry.Pretty where
 
-import List ( intercalate, intersperse )
+import Prelude hiding ( empty )
+
+import Data.List ( intercalate, intersperse )
 
 import ICurry.Types
 import Text.Pretty

@@ -1,17 +1,21 @@
 ------------------------------------------------------------------------------
 --- A simple interpreter for ICurry based on the a small-step semantics.
 ---
--- The following invariants are required for ICurry programs:
--- 1. No nested case expression
--- 2. If there is a case expression, it is on some argument and the
---    argument index is contained in the demand information of the function.
+--- The following invariants are required for ICurry programs:
+--- 1. No nested case expression
+--- 2. If there is a case expression, it is on some argument and the
+---    argument index is contained in the demand information of the function.
+---
+--- @author Michael Hanus
+--- @version November 2020
 ------------------------------------------------------------------------------
 
 module ICurry.Interpreter
  where
 
-import List   ( init, isPrefixOf, last, replace )
-import System ( sleep, system )
+import Control.Monad  ( when )
+import Data.List      ( init, isPrefixOf, last, replace )
+import System.Process ( sleep, system )
 
 import ICurry.Types
 import ICurry.Graph

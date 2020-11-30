@@ -2,18 +2,17 @@
 --- This library defines I/O actions to read and write ICurry programs.
 ---
 --- @author Michael Hanus
---- @version February 2020
+--- @version November 2020
 ------------------------------------------------------------------------------
 
 module ICurry.Files where
 
-import Directory       ( doesFileExist )
-import FilePath        ( takeFileName, (</>), (<.>) )
-import ReadShowTerm    ( readUnqualifiedTerm, showTerm )
-
+import ReadShowTerm        ( readUnqualifiedTerm, showTerm )
 import System.CurryPath    ( inCurrySubdir, stripCurrySuffix
                            , lookupModuleSourceInLoadPath
                            )
+import System.Directory    ( doesFileExist )
+import System.FilePath     ( takeFileName, (</>), (<.>) )
 
 import ICurry.Types
 

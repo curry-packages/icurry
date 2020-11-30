@@ -2,16 +2,17 @@
 --- An implementation of term graphs used by the ICurry interpreter.
 ---
 --- @author Michael Hanus
---- @version January 2020
+--- @version November 2020
 ------------------------------------------------------------------------------
 
 module ICurry.Graph
  where
 
-import IO     ( hPutStr, hClose )
-import IOExts ( connectToCommand )
-import List   ( intercalate, nub )
-import System ( system )
+import Data.List      ( intercalate, nub )
+import System.IO      ( hPutStr, hClose )
+
+import System.IOExts  ( connectToCommand )
+import System.Process ( system )
 
 import ShowDotGraph as Dot
 
@@ -31,10 +32,10 @@ viewDot withviewer num =
     dothdl <- connectToCommand $ "dot -Tpdf -o" ++ outpdf
     hPutStr dothdl dottxt
     hClose dothdl
-    maybe done
+    maybe (return ())
           (\c -> do
              system $ unwords [c, outpdf, "2> /dev/null", "> /dev/null", "&"]
-             done)
+             return ())
           withviewer
 
 ------------------------------------------------------------------------------

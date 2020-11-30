@@ -2,16 +2,18 @@
 --- This module contains a simple compiler from FlatCurry to ICurry programs.
 ---
 --- @author Michael Hanus
---- @version August 2020
+--- @version November 2020
 ------------------------------------------------------------------------------
 
 module ICurry.Main where
 
-import GetOpt
-import ReadNumeric       ( readNat )
-import System            ( exitWith, getArgs )
+import Control.Monad         ( when, unless )
+import Numeric               ( readNat )
+import System.Environment    ( getArgs )
+import System.Console.GetOpt
 
-import System.CurryPath  ( stripCurrySuffix )
+import System.CurryPath      ( stripCurrySuffix )
+import System.Process        ( exitWith )
 
 import ICurry.Compiler
 import ICurry.Files
@@ -30,8 +32,8 @@ testI p =
 banner :: String
 banner = unlines [bannerLine, bannerText, bannerLine]
  where
-   bannerText = "ICurry Compiler (Version of 06/08/20)"
-   bannerLine = take (length bannerText) (repeat '=')
+  bannerText = "ICurry Compiler (Version of 30/11/20)"
+  bannerLine = take (length bannerText) (repeat '=')
 
 main :: IO ()
 main = do
@@ -115,11 +117,9 @@ options =
            "do not generate variable declarations when\nvariables are introduced by assignments"
   ]
  where
-  safeReadNat opttrans s opts =
-   let numError = error "Illegal number argument (try `-h' for help)"
-   in maybe numError
-            (\ (n,rs) -> if null rs then opttrans n opts else numError)
-            (readNat s)
+  safeReadNat opttrans s opts = case readNat s of
+    [(n,"")] -> opttrans n opts
+    _        -> error "Illegal number argument (try `-h' for help)"
 
   checkVerb n opts = if n>=0 && n<4
                      then opts { optVerb = n }

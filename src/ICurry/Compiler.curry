@@ -6,7 +6,7 @@
 --- * remove declarations/assignments of unused variables in ICurry code
 ---
 --- @author Michael Hanus
---- @version August 2020
+--- @version November 2020
 ------------------------------------------------------------------------------
 
 module ICurry.Compiler
@@ -14,7 +14,8 @@ module ICurry.Compiler
  , printStatus, printIntermediate )
  where
 
-import List              ( elemIndex, maximum )
+import Control.Monad     ( when )
+import Data.List         ( elemIndex, maximum )
 
 import FlatCurry.Files   ( readFlatCurry )
 import FlatCurry.Goodies ( allVars, consName, funcName, funcVisibility
@@ -159,6 +160,8 @@ flat2icurry opts (Prog modname imps types funs _) =
         (map (trFunc opts) funs)
  where
   trTypeDecl (_,  TypeSyn _ _ _ _)   = []
+  trTypeDecl (_,  TypeNew _ _ _ _)   =
+    error $ "ICurry.Compiler: newtype occurred!" -- TODO!
   trTypeDecl (ti, Type (mn,tn) _ _ cdecl) =
     [IDataType (mn,tn,ti)
                (map (\ (i, Cons (cmn,cn) ar _ _) -> ((cmn,cn,i),ar))

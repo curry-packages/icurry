@@ -5,12 +5,12 @@
 --- constructor ordering of the corresponding data definitions.
 ---
 --- @author Michael Hanus
---- @version January 2020
+--- @version November 2020
 ------------------------------------------------------------------------------
 
 module FlatCurry.CaseCompletion where
 
-import List
+import Data.List
 
 import FlatCurry.Files
 import FlatCurry.Types
@@ -113,6 +113,8 @@ dataDeclsOf :: Prog -> [DataDecl]
 dataDeclsOf (Prog _ _ tdecls _ _) = concatMap dataDeclsOfTypeDecl tdecls
  where
   dataDeclsOfTypeDecl (TypeSyn _ _ _ _)   = []
+  dataDeclsOfTypeDecl (TypeNew _ _ _ _)   =
+    error $ "FlatCurry.CaseCompletion: newtype occurred!" -- TODO!
   dataDeclsOfTypeDecl (Type tn _ _ cdecl) =
     [(tn, map (\ (Cons cn ar _ _) -> (cn,ar)) cdecl)]
 

@@ -7,12 +7,12 @@
 --- should only be used if the actual function types are irrelevant!
 ---
 --- @author Michael Hanus
---- @version June 2020
+--- @version November 2020
 ------------------------------------------------------------------------------
 
 module FlatCurry.CaseLifting where
 
-import List ( maximum, union )
+import Data.List                 ( maximum, union )
 
 import Control.Monad.Trans.State ( State, get, put, modify, evalState )
 import FlatCurry.Goodies         ( allVars, funcName )
