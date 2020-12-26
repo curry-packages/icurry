@@ -12,8 +12,7 @@ import Numeric               ( readNat )
 import System.Environment    ( getArgs )
 import System.Console.GetOpt
 
-import System.CurryPath      ( splitValidProgramName, stripCurrySuffix )
-import System.Directory      ( getCurrentDirectory, setCurrentDirectory )
+import System.CurryPath      ( runModuleAction )
 import System.Process        ( exitWith )
 
 import ICurry.Compiler
@@ -22,18 +21,18 @@ import ICurry.Interpreter
 import ICurry.Types
 
 test :: String -> IO ()
-test p = mainProg defaultICOptions { optVerb = 3, optMain = "main" } p
+test = icurryOnModule defaultICOptions { optVerb = 3, optMain = "main" }
 
 testI :: String -> IO ()
-testI p =
-  mainProg defaultICOptions { optVerb = 3, optMain = "main"
-                            , optShowGraph = True, optInteractive = True } p
+testI =
+  icurryOnModule defaultICOptions { optVerb = 3, optMain = "main"
+                                  , optShowGraph = True, optInteractive = True }
 
 ------------------------------------------------------------------------------
 banner :: String
 banner = unlines [bannerLine, bannerText, bannerLine]
  where
-  bannerText = "ICurry Compiler (Version of 30/11/20)"
+  bannerText = "ICurry Compiler (Version of 26/12/20)"
   bannerLine = take (length bannerText) (repeat '=')
 
 main :: IO ()
@@ -42,21 +41,16 @@ main = do
   (opts,progs) <- processOptions args
   case progs of
     []  -> error "Module name missing"
-    [p] -> mainProg opts p
+    [p] -> runModuleAction (icurryOnModule opts) p
     _   -> error "Too many module names provided"
 
-mainProg :: ICOptions -> String -> IO ()
-mainProg opts progname = do
-  let (progdir,mname) = splitValidProgramName progname
-  curdir <- getCurrentDirectory
-  unless (progdir == ".") $ do
-    printStatus opts $ "Switching to directory '" ++ progdir ++ "'..."
-    setCurrentDirectory progdir
-  iprog <- icCompile opts mname
+icurryOnModule :: ICOptions -> String -> IO ()
+icurryOnModule opts modname = do
+  iprog <- icCompile opts modname
   let imain = optMain opts
   if null imain
     then do
-      icyname <- iCurryFilePath mname
+      icyname <- iCurryFilePath modname
       writeICurryFile icyname iprog
       printStatus opts $ "ICurry program written to '" ++ icyname ++ "'"
     else do
@@ -71,7 +65,6 @@ mainProg opts progname = do
                            else opts1 { interactive = True }
                     else opts1
       execIProg opts2 iprog imain
-  unless (progdir == ".") $ setCurrentDirectory curdir
 
 --- Process the actual command line argument and return the options
 --- and the name of the main program.
@@ -84,7 +77,7 @@ processOptions argv = do
   when (optHelp opts) (printUsage >> exitWith 0)
   when (not (null (optMain opts)) && not (optLift opts)) $ error
     "Incompatible options: interpreter requires case/let lifting!"
-  return (opts, map stripCurrySuffix args)
+  return (opts, args)
  where
   printUsage = putStrLn (banner ++ "\n" ++ usageText)
 
