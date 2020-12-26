@@ -2,7 +2,7 @@
 --- This module contains a simple compiler from FlatCurry to ICurry programs.
 ---
 --- @author Michael Hanus
---- @version November 2020
+--- @version December 2020
 ------------------------------------------------------------------------------
 
 module ICurry.Main where
@@ -12,7 +12,8 @@ import Numeric               ( readNat )
 import System.Environment    ( getArgs )
 import System.Console.GetOpt
 
-import System.CurryPath      ( stripCurrySuffix )
+import System.CurryPath      ( splitValidProgramName, stripCurrySuffix )
+import System.Directory      ( getCurrentDirectory, setCurrentDirectory )
 import System.Process        ( exitWith )
 
 import ICurry.Compiler
@@ -45,12 +46,17 @@ main = do
     _   -> error "Too many module names provided"
 
 mainProg :: ICOptions -> String -> IO ()
-mainProg opts p = do
-  iprog <- icCompile opts p
+mainProg opts progname = do
+  let (progdir,mname) = splitValidProgramName progname
+  curdir <- getCurrentDirectory
+  unless (progdir == ".") $ do
+    printStatus opts $ "Switching to directory '" ++ progdir ++ "'..."
+    setCurrentDirectory progdir
+  iprog <- icCompile opts mname
   let imain = optMain opts
   if null imain
     then do
-      icyname <- iCurryFilePath p
+      icyname <- iCurryFilePath mname
       writeICurryFile icyname iprog
       printStatus opts $ "ICurry program written to '" ++ icyname ++ "'"
     else do
@@ -65,6 +71,7 @@ mainProg opts p = do
                            else opts1 { interactive = True }
                     else opts1
       execIProg opts2 iprog imain
+  unless (progdir == ".") $ setCurrentDirectory curdir
 
 --- Process the actual command line argument and return the options
 --- and the name of the main program.

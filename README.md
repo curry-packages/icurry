@@ -45,10 +45,13 @@ In the following, we describe various uses of the `icurry` tool.
 
        > icurry Prog
 
-   This will generate the file `.curry/Prog.icy`, i.e., the suffix `icy`
-   is used for generated ICurry programs. If the program is located
-   in a non-local directory, the generated file is placed relative
-   to the directory of the source program.
+   This will generate the file `Prog.icy` in the directory where
+   the Curry system stores intermediate files, e.g., `.curry/pakcs-3.2.0`.
+   Hence, the suffix `icy` is used for generated ICurry programs.
+   If the program is located in a non-local directory, i.e., `Prog` is
+   not a module name but prefixed by a directory `DIR`, this command
+   switches to the directory `DIR` so that the generated file
+   is placed in the intermediate files in directory `DIR`.
 
    In order to see a human-readable presentation of the generated program,
    use option `-v`, i.e.,
