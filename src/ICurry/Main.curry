@@ -2,7 +2,7 @@
 --- This module contains a simple compiler from FlatCurry to ICurry programs.
 ---
 --- @author Michael Hanus
---- @version December 2020
+--- @version January 2021
 ------------------------------------------------------------------------------
 
 module ICurry.Main where
@@ -13,6 +13,7 @@ import System.Environment    ( getArgs )
 import System.Console.GetOpt
 
 import System.CurryPath      ( runModuleAction )
+import System.Path           ( fileInPath )
 import System.Process        ( exitWith )
 
 import ICurry.Compiler
@@ -32,7 +33,7 @@ testI =
 banner :: String
 banner = unlines [bannerLine, bannerText, bannerLine]
  where
-  bannerText = "ICurry Compiler (Version of 26/12/20)"
+  bannerText = "ICurry Compiler (Version of 11/01/21)"
   bannerLine = take (length bannerText) (repeat '=')
 
 main :: IO ()
@@ -44,8 +45,22 @@ main = do
     [p] -> runModuleAction (icurryOnModule opts) p
     _   -> error "Too many module names provided"
 
+checkExecutables :: ICOptions -> IO ()
+checkExecutables opts =
+  if null (optMain opts) || not (optShowGraph opts)
+    then return ()
+    else mapM_ checkExec ["dot", optViewPDF opts]
+ where
+  checkExec p = do
+    exp <- fileInPath p
+    unless exp $ do
+      putStrLn $ "Executable '" ++ p ++ "' not found in path: " ++
+                 "icurry interpreter terminated"
+      exitWith 1
+
 icurryOnModule :: ICOptions -> String -> IO ()
 icurryOnModule opts modname = do
+  checkExecutables opts
   iprog <- icCompile opts modname
   let imain = optMain opts
   if null imain

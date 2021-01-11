@@ -2,7 +2,7 @@
 --- An implementation of term graphs used by the ICurry interpreter.
 ---
 --- @author Michael Hanus
---- @version November 2020
+--- @version January 2021
 ------------------------------------------------------------------------------
 
 module ICurry.Graph
@@ -11,10 +11,9 @@ module ICurry.Graph
 import Data.List      ( intercalate, nub )
 import System.IO      ( hPutStr, hClose )
 
+import Data.GraphViz as Dot
 import System.IOExts  ( connectToCommand )
 import System.Process ( system )
-
-import ShowDotGraph as Dot
 
 ------------------------------------------------------------------------------
 --- Views a dot graph as PDF.
