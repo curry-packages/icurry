@@ -53,6 +53,10 @@ In the following, we describe various uses of the `icurry` tool.
    switches to the directory `DIR` so that the generated file
    is placed in the intermediate files in directory `DIR`.
 
+   The option `-o` can be used to specify an explicit output file
+   different from the intermediate file for the ICurry program.
+   With the option `-o -`, the ICurry program is printed in stdout.
+
    In order to see a human-readable presentation of the generated program,
    use option `-v`, i.e.,
    

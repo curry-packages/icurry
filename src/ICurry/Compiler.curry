@@ -6,7 +6,7 @@
 --- * remove declarations/assignments of unused variables in ICurry code
 ---
 --- @author Michael Hanus
---- @version November 2020
+--- @version January 2021
 ------------------------------------------------------------------------------
 
 module ICurry.Compiler
@@ -27,8 +27,9 @@ import Text.Pretty       ( pPrint )
 import FlatCurry.CaseCompletion
 import FlatCurry.CaseLifting ( defaultLiftOpts, defaultNoLiftOpts, liftProg )
 
-import ICurry.Files  ( iCurryFileName, writeICurryFile )
-import ICurry.Pretty ( ppIProg )
+import ICurry.Files   ( iCurryFileName, writeICurryFile )
+import ICurry.Options
+import ICurry.Pretty  ( ppIProg )
 import ICurry.Types
 
 test :: String -> IO ()
@@ -93,62 +94,6 @@ flatCurry2ICurry opts prog = do
 
   textWithLines s = unlines [l, s, l]
    where l = take 78 (repeat '-')
-
-
-------------------------------------------------------------------------------
---- Options for the ICurry compiler.
---- Contains mappings from constructor and functions names
---- into locally unique integers and other stuff.
-data ICOptions = ICOptions
-  { optVerb        :: Int    -- verbosity
-                             -- (0: quiet, 1: status, 2: intermediate, 3: all)
-  , optHelp        :: Bool   -- if help info should be printed
-  , optLift        :: Bool   -- should nested cases/lets be lifted to top-level?
-  , optMain        :: String -- name of main function
-  , optShowGraph   :: Bool   -- visualize graph during execution?
-  , optViewPDF     :: String -- command to view graph PDF
-  , optInteractive :: Bool   -- interactive execution?
-  , optVarDecls    :: Bool   -- optimize variable declarations?
-  -- internal options
-  , optConsMap   :: [(QName,(IArity,Int))] -- map: cons. names to arity/position
-  , optFunMap    :: [(QName,Int)]       -- map: function names to module indices
-  , optFun       :: QName  -- currently compiled function
-  }
-
-defaultICOptions :: ICOptions
-defaultICOptions =
-  ICOptions 1 False True "" False "evince" False False [] [] ("","")
-
--- Lookup arity and position index of a constructor.
-arityPosOfCons :: ICOptions -> QName -> (IArity,Int)
-arityPosOfCons opts qn =
-  maybe (error $ "Internal error in ICurry.Compiler: arity of " ++
-                 showQName qn ++ " is unknown")
-        id
-        (lookup qn (optConsMap opts))
-
--- Lookup position index of a constructor.
-posOfCons :: ICOptions -> QName -> Int
-posOfCons opts qn = snd (arityPosOfCons opts qn)
-
-posOfFun :: ICOptions -> QName -> Int
-posOfFun opts qn =
-  maybe (error $ "Internal error in ICurry.Compiler: arity of " ++
-                 showQName qn ++ " is unknown")
-        id
-        (lookup qn (optFunMap opts))
-
-printStatus :: ICOptions -> String -> IO ()
-printStatus opts s = when (optVerb opts > 0) $ putStrLn s
-
-printIntermediate :: ICOptions -> String -> IO ()
-printIntermediate opts s = when (optVerb opts > 1) $ putStrLn s
-
-printDetails :: ICOptions -> String -> IO ()
-printDetails opts s = when (optVerb opts > 2) $ putStrLn s
-
-funError :: ICOptions -> String -> _
-funError opts err = error $ "Function '" ++ snd (optFun opts) ++ "': " ++ err
 
 ------------------------------------------------------------------------------
 --- Translation from FlatCurry to ICurry according to the transformation
@@ -303,9 +248,6 @@ showIProg (IProg mn imps types funs) = unlines $
 
 ------------------------------------------------------------------------------
 -- Auxiliaries:
-
-showQName :: QName -> String
-showQName (mn,fn) = mn ++ "." ++ fn
 
 pre :: String -> QName
 pre s = ("Prelude", s)

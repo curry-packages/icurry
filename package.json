@@ -25,7 +25,8 @@
         "kics2": ">= 3.0.0, < 4.0.0"
     },
     "exportedModules": [ "ICurry.Types", "ICurry.Files", "ICurry.Pretty",
-                         "ICurry.Compiler", "ICurry.Interpreter" ],
+                         "ICurry.Compiler", "ICurry.Interpreter",
+                         "ICurry.Options" ],
     "executable": {
         "name"   : "icurry",
         "main"   : "ICurry.Main"
