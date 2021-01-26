@@ -3,7 +3,7 @@
     "version": "3.1.0",
     "author": "Michael Hanus <mh@informatik.uni-kiel.de>",
     "synopsis": "Intermediate format for compiling Curry to imperative languages",
-    "category": [ "Metaprogramming" ],
+    "category": [ "Compiler", "Metaprogramming" ],
     "license": "BSD-3-Clause",
     "licenseFile": "LICENSE",
     "dependencies": {
