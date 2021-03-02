@@ -2,7 +2,7 @@
 --- Definition and processing of options for the ICurry compiler.
 ---
 --- @author Michael Hanus
---- @version January 2021
+--- @version March 2021
 ------------------------------------------------------------------------------
 
 module ICurry.Options
@@ -16,6 +16,7 @@ import FlatCurry.Types       ( QName )
 import ICurry.Types          ( IArity )
 import System.CurryPath      ( currySubdir )
 import System.Directory      ( getAbsolutePath )
+import System.FrontendExec   ( FrontendParams, defaultParams, setQuiet )
 import System.Process        ( exitWith )
 
 ------------------------------------------------------------------------------
@@ -33,6 +34,7 @@ data ICOptions = ICOptions
   , optViewPDF     :: String -- command to view graph PDF
   , optInteractive :: Bool   -- interactive execution?
   , optVarDecls    :: Bool   -- optimize variable declarations?
+  , optFrontendParams :: FrontendParams
   -- internal options
   , optConsMap   :: [(QName,(IArity,Int))] -- map: cons names to arity/position
   , optFunMap    :: [(QName,Int)]          -- map: func names to module indices
@@ -41,7 +43,8 @@ data ICOptions = ICOptions
 
 defaultICOptions :: ICOptions
 defaultICOptions =
-  ICOptions 1 False True "" "" False "evince" False False [] [] ("","")
+  ICOptions 1 False True "" "" False "evince" False False
+            (setQuiet True defaultParams) [] [] ("","")
 
 -- Lookup arity and position index of a constructor.
 arityPosOfCons :: ICOptions -> QName -> (IArity,Int)

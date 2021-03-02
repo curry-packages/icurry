@@ -13,16 +13,13 @@
         "execpath"     : ">= 3.0.0, < 4.0.0",
         "filepath"     : ">= 3.0.0, < 4.0.0",
         "flatcurry"    : ">= 3.0.0, < 4.0.0",
+        "frontend-exec": ">= 3.0.0, < 4.0.0",
         "graphviz"     : ">= 3.0.0, < 4.0.0",
         "io-extra"     : ">= 3.0.0, < 4.0.0",
         "process"      : ">= 3.0.0, < 4.0.0",
         "read-legacy"  : ">= 3.0.0, < 4.0.0",
         "transformers" : ">= 3.0.0, < 4.0.0",
         "wl-pprint"    : ">= 3.0.0, < 4.0.0"
-    },
-    "compilerCompatibility": {
-        "pakcs": ">= 3.0.0, < 4.0.0",
-        "kics2": ">= 3.0.0, < 4.0.0"
     },
     "exportedModules": [ "ICurry.Types", "ICurry.Files", "ICurry.Pretty",
                          "ICurry.Compiler", "ICurry.Interpreter",

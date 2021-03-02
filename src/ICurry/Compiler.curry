@@ -6,7 +6,7 @@
 --- * remove declarations/assignments of unused variables in ICurry code
 ---
 --- @author Michael Hanus
---- @version January 2021
+--- @version March 2021
 ------------------------------------------------------------------------------
 
 module ICurry.Compiler
@@ -17,7 +17,7 @@ module ICurry.Compiler
 import Control.Monad     ( when )
 import Data.List         ( elemIndex, maximum )
 
-import FlatCurry.Files   ( readFlatCurry )
+import FlatCurry.Files   ( readFlatCurryWithParseOptions )
 import FlatCurry.Goodies ( allVars, consName, funcName, funcVisibility
                          , progFuncs, progImports, progTypes )
 import FlatCurry.Pretty  ( defaultOptions, ppProg )
@@ -44,7 +44,7 @@ test p = do
 icCompile :: ICOptions -> String -> IO IProg
 icCompile opts p = do
   printStatus opts $ "Reading FlatCurry program '" ++ p ++ "'..."
-  prog <- readFlatCurry p
+  prog <- readFlatCurryWithParseOptions p (optFrontendParams opts)
   flatCurry2ICurry opts prog
 
 --- Translates a FlatCurry program into an ICurry program.
@@ -54,7 +54,9 @@ flatCurry2ICurry :: ICOptions -> Prog -> IO IProg
 flatCurry2ICurry opts prog = do
   let impmods = progImports prog
   printStatus opts $ "Reading imported FlatCurry modules: " ++ unwords impmods
-  impprogs <- mapM readFlatCurry impmods
+  impprogs <- mapM (\p -> readFlatCurryWithParseOptions p
+                            (optFrontendParams opts))
+                   impmods
   let datadecls = concatMap dataDeclsOf (prog : impprogs)
       ccprog    = completeProg (CaseOptions datadecls) prog
       clprog    = if optLift opts
