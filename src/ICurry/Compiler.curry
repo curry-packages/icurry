@@ -10,19 +10,19 @@
 ------------------------------------------------------------------------------
 
 module ICurry.Compiler
- ( icCompile, flatCurry2ICurry, ICOptions(..), defaultICOptions
- , printStatus, printIntermediate )
- where
+  ( icCompile, flatCurry2ICurry, ICOptions(..), defaultICOptions
+  , printStatus, printIntermediate ) where
 
-import Control.Monad     ( when )
-import Data.List         ( elemIndex, maximum )
+import Control.Monad         ( when )
+import Data.List             ( elemIndex, maximum )
 
-import FlatCurry.Files   ( readFlatCurryWithParseOptions )
-import FlatCurry.Goodies ( allVars, consName, funcName, funcVisibility
-                         , progFuncs, progImports, progTypes )
-import FlatCurry.Pretty  ( defaultOptions, ppProg )
+import FlatCurry.ElimNewtype ( elimNewtype )
+import FlatCurry.Files       ( readFlatCurryWithParseOptions )
+import FlatCurry.Goodies     ( allVars, consName, funcName, funcVisibility
+                             , progFuncs, progImports, progTypes )
+import FlatCurry.Pretty      ( defaultOptions, ppProg )
 import FlatCurry.Types
-import Text.Pretty       ( pPrint )
+import Text.Pretty           ( pPrint )
 
 import FlatCurry.CaseCompletion
 import FlatCurry.CaseLifting ( defaultLiftOpts, defaultNoLiftOpts, liftProg )
@@ -51,13 +51,14 @@ icCompile opts p = do
 --- It also reads the imported modules in order to access their
 --- data and function declarations.
 flatCurry2ICurry :: ICOptions -> Prog -> IO IProg
-flatCurry2ICurry opts prog = do
-  let impmods = progImports prog
+flatCurry2ICurry opts prog0 = do
+  let impmods = progImports prog0
   printStatus opts $ "Reading imported FlatCurry modules: " ++ unwords impmods
   impprogs <- mapM (\p -> readFlatCurryWithParseOptions p
                             (optFrontendParams opts))
                    impmods
-  let datadecls = concatMap dataDeclsOf (prog : impprogs)
+  let prog      = elimNewtype impprogs prog0
+      datadecls = concatMap dataDeclsOf (prog : impprogs)
       ccprog    = completeProg (CaseOptions datadecls) prog
       clprog    = if optLift opts
                     then liftProg defaultLiftOpts ccprog
