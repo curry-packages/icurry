@@ -10,16 +10,17 @@
 ------------------------------------------------------------------------------
 
 module ICurry.Compiler
-  ( icCompile, flatCurry2ICurry, ICOptions(..), defaultICOptions
+  ( icCompile, flatCurry2ICurry, flatCurry2ICurryWithProgs
+  , ICOptions(..), defaultICOptions
   , printStatus, printIntermediate ) where
 
 import Control.Monad         ( when )
-import Data.List             ( elemIndex, maximum )
+import Data.List             ( elemIndex, find, maximum )
 
 import FlatCurry.ElimNewtype ( elimNewtype )
 import FlatCurry.Files       ( readFlatCurryWithParseOptions )
 import FlatCurry.Goodies     ( allVars, consName, funcName, funcVisibility
-                             , progFuncs, progImports, progTypes )
+                             , progFuncs, progImports, progName, progTypes )
 import FlatCurry.Pretty      ( defaultOptions, ppProg )
 import FlatCurry.Types
 import Text.Pretty           ( pPrint )
@@ -51,12 +52,17 @@ icCompile opts p = do
 --- It also reads the imported modules in order to access their
 --- data and function declarations.
 flatCurry2ICurry :: ICOptions -> Prog -> IO IProg
-flatCurry2ICurry opts prog0 = do
+flatCurry2ICurry opts prog0 = flatCurry2ICurryWithProgs opts [] prog0
+
+--- Translates a FlatCurry program into an ICurry program where
+--- some FlatCurry programs are provided.
+--- It also reads the not already provided imported modules
+--- in order to access their data and function declarations.
+flatCurry2ICurryWithProgs :: ICOptions -> [Prog] -> Prog -> IO IProg
+flatCurry2ICurryWithProgs opts progs prog0 = do
   let impmods = progImports prog0
   printStatus opts $ "Reading imported FlatCurry modules: " ++ unwords impmods
-  impprogs <- mapM (\p -> readFlatCurryWithParseOptions p
-                            (optFrontendParams opts))
-                   impmods
+  impprogs <- mapM getFlatProg impmods
   let prog      = elimNewtype impprogs prog0
       datadecls = concatMap dataDeclsOf (prog : impprogs)
       ccprog    = completeProg (CaseOptions datadecls) prog
@@ -78,6 +84,11 @@ flatCurry2ICurry opts prog0 = do
   printDetails opts (textWithLines "Generated ICurry file:" ++ showIProg icprog)
   return icprog
  where
+  getFlatProg p =
+    maybe (readFlatCurryWithParseOptions p (optFrontendParams opts))
+          return
+          (find (\fp -> progName fp == p) progs)
+
   consMapOfProg fcy =
     concatMap (\ (_,cars) -> map (\ ((cname,car),pos) -> (cname,(car,pos)))
                                  (zip cars [0..]))
