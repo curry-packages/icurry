@@ -5,7 +5,7 @@
 --- constructor ordering of the corresponding data definitions.
 ---
 --- @author Michael Hanus
---- @version November 2020
+--- @version March 2021
 ------------------------------------------------------------------------------
 
 module FlatCurry.CaseCompletion where
@@ -112,10 +112,10 @@ unionMap f = foldr union [] . map f
 dataDeclsOf :: Prog -> [DataDecl]
 dataDeclsOf (Prog _ _ tdecls _ _) = concatMap dataDeclsOfTypeDecl tdecls
  where
-  dataDeclsOfTypeDecl (TypeSyn _ _ _ _)   = []
-  dataDeclsOfTypeDecl (TypeNew _ _ _ _)   =
-    error $ "FlatCurry.CaseCompletion: newtype occurred!" -- TODO!
-  dataDeclsOfTypeDecl (Type tn _ _ cdecl) =
+  dataDeclsOfTypeDecl (TypeSyn _  _ _ _               ) = []
+  dataDeclsOfTypeDecl (TypeNew tn _ _ (NewCons cn _ _)) =
+    [(tn, [(cn,1)])] -- should not be relevant since newtypes are eliminated
+  dataDeclsOfTypeDecl (Type    tn _ _ cdecl           ) =
     [(tn, map (\ (Cons cn ar _ _) -> (cn,ar)) cdecl)]
 
 ------------------------------------------------------------------------------
