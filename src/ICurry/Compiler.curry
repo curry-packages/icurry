@@ -18,7 +18,8 @@ import Control.Monad         ( when )
 import Data.List             ( elemIndex, find, maximum )
 
 import FlatCurry.ElimNewtype ( elimNewtype )
-import FlatCurry.Files       ( readFlatCurryWithParseOptions )
+import FlatCurry.Files       ( readFlatCurryWithParseOptions
+                             , readFlatCurryIntWithParseOptions )
 import FlatCurry.Goodies     ( allVars, consName, funcName, funcVisibility
                              , progFuncs, progImports, progName, progTypes )
 import FlatCurry.Pretty      ( defaultOptions, ppProg )
@@ -55,14 +56,13 @@ flatCurry2ICurry :: ICOptions -> Prog -> IO IProg
 flatCurry2ICurry opts prog0 = flatCurry2ICurryWithProgs opts [] prog0
 
 --- Translates a FlatCurry program into an ICurry program where
---- some FlatCurry programs are provided.
---- It also reads the not already provided imported modules
---- in order to access their data and function declarations.
+--- some FlatCurry interfaces are provided.
+--- It also reads the interfaces of imported modules, if not already
+--- provided, in order to access their data and function declarations.
 flatCurry2ICurryWithProgs :: ICOptions -> [Prog] -> Prog -> IO IProg
 flatCurry2ICurryWithProgs opts progs prog0 = do
   let impmods = progImports prog0
-  printStatus opts $ "Reading imported FlatCurry modules: " ++ unwords impmods
-  impprogs <- mapM getFlatProg impmods
+  impprogs <- mapM getInterface impmods
   let prog      = elimNewtype impprogs prog0
       datadecls = concatMap dataDeclsOf (prog : impprogs)
       ccprog    = completeProg (CaseOptions datadecls) prog
@@ -84,8 +84,9 @@ flatCurry2ICurryWithProgs opts progs prog0 = do
   printDetails opts (textWithLines "Generated ICurry file:" ++ showIProg icprog)
   return icprog
  where
-  getFlatProg p =
-    maybe (readFlatCurryWithParseOptions p (optFrontendParams opts))
+  getInterface p =
+    maybe (do printStatus opts $ "Read FlatCurry interface of '" ++ p ++ "'"
+              readFlatCurryIntWithParseOptions p (optFrontendParams opts))
           return
           (find (\fp -> progName fp == p) progs)
 
