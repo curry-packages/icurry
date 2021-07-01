@@ -2,7 +2,7 @@
 --- Definition and processing of options for the ICurry compiler.
 ---
 --- @author Michael Hanus
---- @version March 2021
+--- @version July 2021
 ------------------------------------------------------------------------------
 
 module ICurry.Options
@@ -49,7 +49,7 @@ defaultICOptions =
 -- Lookup arity and position index of a constructor.
 arityPosOfCons :: ICOptions -> QName -> (IArity,Int)
 arityPosOfCons opts qn =
-  maybe (error $ "Internal error in ICurry.Compiler: arity of " ++
+  maybe (error $ "Internal error in ICurry.Compiler: arity of constructor " ++
                  showQName qn ++ " is unknown")
         id
         (lookup qn (optConsMap opts))
@@ -60,7 +60,7 @@ posOfCons opts qn = snd (arityPosOfCons opts qn)
 
 posOfFun :: ICOptions -> QName -> Int
 posOfFun opts qn =
-  maybe (error $ "Internal error in ICurry.Compiler: arity of " ++
+  maybe (error $ "Internal error in ICurry.Compiler: arity of operation " ++
                  showQName qn ++ " is unknown")
         id
         (lookup qn (optFunMap opts))
