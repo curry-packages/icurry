@@ -6,7 +6,7 @@
 --- * remove declarations/assignments of unused variables in ICurry code
 ---
 --- @author Michael Hanus
---- @version March 2021
+--- @version July 2021
 ------------------------------------------------------------------------------
 
 module ICurry.Compiler
@@ -76,8 +76,7 @@ flatCurry2ICurryWithProgs opts progs prog0 = do
       impfunmap = concatMap publicFunMapOfProg impprogs
       pubfunmap = publicFunMapOfProg prog
       funmap    = pubfunmap ++ privateFunMapOfProg clprog pubfunmap ++ impfunmap
-  let icprog = flat2icurry (opts { optConsMap = consmap, optFunMap = funmap})
-                           clprog
+  let icprog = flat2icurry (setConsFuns opts consmap funmap) clprog
   printIntermediate opts $
     textWithLines "Generated ICurry program:" ++
     pPrint (ppIProg icprog)
@@ -121,7 +120,7 @@ flat2icurry opts (Prog modname imps types funs _) =
  where
   trTypeDecl (_,  TypeSyn _ _ _ _)   = []
   trTypeDecl (_,  TypeNew _ _ _ _)   =
-    error $ "ICurry.Compiler: newtype occurred!" -- TODO!
+    error $ "ICurry.Compiler: newtype occurred!" -- should not occur...
   trTypeDecl (ti, Type (mn,tn) _ _ cdecl) =
     [IDataType (mn,tn,ti)
                (map (\ (i, Cons (cmn,cn) ar _ _) -> ((cmn,cn,i),ar))
@@ -140,13 +139,13 @@ trFunc opts (Func qn@(mn,fn) ar vis _ rule) =
 
 -- Computes (approximates) the arguments demanded by a rule.
 demandOf :: Rule -> [Int]
-demandOf (External _) = [] -- TODO
+demandOf (External _)    = [] -- TODO
 demandOf (Rule args rhs) = case rhs of
   Case _ (Var v) _ -> maybe [] (: []) (elemIndex v args)
   _                -> []
 
 trRule :: ICOptions -> Rule -> IFuncBody
-trRule _ (External s) = IExternal s
+trRule _    (External s)    = IExternal s
 trRule opts (Rule args rhs) = IFuncBody (toIBlock opts args rhs 0)
 
 toIBlock :: ICOptions -> [VarIndex] -> Expr -> Int -> IBlock
@@ -244,12 +243,12 @@ trLit (Charc c)  = IChar c
 
 -- Extracts the variables and their positions occurring in an ICurry expression
 varPos :: [Int] -> IExpr -> [(IVarIndex,[Int])]
-varPos rpos (IVar v) = [(v,rpos)]
-varPos _    (IVarAccess _ _) = []
-varPos _    (ILit _) = []
-varPos rpos (IFCall _ args) = concatMap (\ (i,e) -> varPos (rpos ++ [i]) e)
-                                        (zip [0..] args)
-varPos rpos (ICCall qn args) = varPos rpos (IFCall qn args)
+varPos rpos (IVar v)            = [(v,rpos)]
+varPos _    (IVarAccess _ _)    = []
+varPos _    (ILit _)            = []
+varPos rpos (IFCall _ args)     = concatMap (\ (i,e) -> varPos (rpos ++ [i]) e)
+                                            (zip [0..] args)
+varPos rpos (ICCall qn args)    = varPos rpos (IFCall qn args)
 varPos rpos (IFPCall qn _ args) = varPos rpos (IFCall qn args)
 varPos rpos (ICPCall qn _ args) = varPos rpos (IFCall qn args)
 varPos rpos (IOr e1 e2) = varPos (rpos ++ [0]) e1 ++ varPos (rpos ++ [1]) e2

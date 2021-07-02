@@ -36,21 +36,27 @@ data ICOptions = ICOptions
   , optVarDecls    :: Bool   -- optimize variable declarations?
   , optFrontendParams :: FrontendParams
   -- internal options
-  , optConsMap   :: [(QName,(IArity,Int))] -- map: cons names to arity/position
-  , optFunMap    :: [(QName,Int)]          -- map: func names to module indices
+  , optConsMap   :: [(QName,(IArity,Int))] -- map cons names to arity/position
+  , optFunMap    :: [(QName,Int)]          -- map func names to module indices
   , optFun       :: QName    -- currently compiled function
   }
 
+-- The default options with empty internal options.
 defaultICOptions :: ICOptions
 defaultICOptions =
   ICOptions 1 False True "" "" False "evince" False False
             (setQuiet True defaultParams) [] [] ("","")
 
+-- Sets the internal constructor and function maps from given lists.
+setConsFuns :: ICOptions -> [(QName,(IArity,Int))] -> [(QName,Int)] -> ICOptions
+setConsFuns opts conslist funlist =
+  opts { optConsMap = conslist, optFunMap = funlist }
+
 -- Lookup arity and position index of a constructor.
 arityPosOfCons :: ICOptions -> QName -> (IArity,Int)
 arityPosOfCons opts qn =
-  maybe (error $ "Internal error in ICurry.Compiler: arity of constructor " ++
-                 showQName qn ++ " is unknown")
+  maybe (funError opts $ "Internal error in ICurry.Compiler:\n" ++
+           "arity of constructor " ++ showQName qn ++ " is unknown")
         id
         (lookup qn (optConsMap opts))
 
@@ -60,8 +66,8 @@ posOfCons opts qn = snd (arityPosOfCons opts qn)
 
 posOfFun :: ICOptions -> QName -> Int
 posOfFun opts qn =
-  maybe (error $ "Internal error in ICurry.Compiler: arity of operation " ++
-                 showQName qn ++ " is unknown")
+  maybe (funError opts $ "Internal error in ICurry.Compiler:\n" ++
+           "arity of operation " ++ showQName qn ++ " is unknown")
         id
         (lookup qn (optFunMap opts))
 
