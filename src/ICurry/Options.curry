@@ -12,6 +12,7 @@ import Control.Monad         ( when, unless )
 import Numeric               ( readNat )
 import System.Console.GetOpt
 
+import qualified Data.Map as Map
 import FlatCurry.Types       ( QName )
 import ICurry.Types          ( IArity )
 import System.CurryPath      ( currySubdir )
@@ -36,8 +37,10 @@ data ICOptions = ICOptions
   , optVarDecls    :: Bool   -- optimize variable declarations?
   , optFrontendParams :: FrontendParams
   -- internal options
-  , optConsMap   :: [(QName,(IArity,Int))] -- map cons names to arity/position
-  , optFunMap    :: [(QName,Int)]          -- map func names to module indices
+   -- map qualified cons names to arity/position:
+  , optConsMap   :: [(String, Map.Map String (IArity,Int))]
+   -- map qualified function names to indices:
+  , optFunMap    :: [(String, Map.Map String Int)]
   , optFun       :: QName    -- currently compiled function
   }
 
@@ -50,7 +53,24 @@ defaultICOptions =
 -- Sets the internal constructor and function maps from given lists.
 setConsFuns :: ICOptions -> [(QName,(IArity,Int))] -> [(QName,Int)] -> ICOptions
 setConsFuns opts conslist funlist =
-  opts { optConsMap = conslist, optFunMap = funlist }
+  opts { optConsMap = foldr addQMap [] conslist
+       , optFunMap  = foldr addQMap [] funlist
+       }
+
+-- Adds the info for a qualified name in a map.
+addQMap :: (QName,a) -> [(String, Map.Map String a)]
+        -> [(String, Map.Map String a)]
+addQMap ((mn,fn),i) [] = [(mn, Map.singleton fn i)]
+addQMap (qn@(mn,fn),i) ((m,mmap):mmaps) =
+  if mn == m then (m, Map.insert fn i mmap) : mmaps
+             else (m,mmap) : addQMap (qn,i) mmaps
+
+-- Looks up the info for a qualified name in a map.
+qmapLookup :: QName -> [(String, Map.Map String a)] -> Maybe a
+qmapLookup (mn,fn) mmap =
+  maybe Nothing
+        (\fm -> Map.lookup fn fm)
+        (lookup mn mmap)
 
 -- Lookup arity and position index of a constructor.
 arityPosOfCons :: ICOptions -> QName -> (IArity,Int)
@@ -58,7 +78,7 @@ arityPosOfCons opts qn =
   maybe (funError opts $ "Internal error in ICurry.Compiler:\n" ++
            "arity of constructor " ++ showQName qn ++ " is unknown")
         id
-        (lookup qn (optConsMap opts))
+        (qmapLookup qn (optConsMap opts))
 
 -- Lookup position index of a constructor.
 posOfCons :: ICOptions -> QName -> Int
@@ -69,7 +89,7 @@ posOfFun opts qn =
   maybe (funError opts $ "Internal error in ICurry.Compiler:\n" ++
            "arity of operation " ++ showQName qn ++ " is unknown")
         id
-        (lookup qn (optFunMap opts))
+        (qmapLookup qn (optFunMap opts))
 
 printStatus :: ICOptions -> String -> IO ()
 printStatus opts s = when (optVerb opts > 0) $ putStrLn s
