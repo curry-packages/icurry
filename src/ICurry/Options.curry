@@ -9,6 +9,7 @@ module ICurry.Options
  where
 
 import Control.Monad         ( when, unless )
+import Data.List             ( union )
 import Numeric               ( readNat )
 import System.Console.GetOpt
 
@@ -37,25 +38,36 @@ data ICOptions = ICOptions
   , optVarDecls    :: Bool   -- optimize variable declarations?
   , optFrontendParams :: FrontendParams
   -- internal options
+  -- list of module names where the constructor/functions are stored
+  -- in the optConsMap and optFunMap
+  , optModsMaps    :: [String]
    -- map qualified cons names to arity/position:
-  , optConsMap   :: [(String, Map.Map String (IArity,Int))]
+  , optConsMap     :: [(String, Map.Map String (IArity,Int))]
    -- map qualified function names to indices:
-  , optFunMap    :: [(String, Map.Map String Int)]
-  , optFun       :: QName    -- currently compiled function
+  , optFunMap      :: [(String, Map.Map String Int)]
+  , optFun         :: QName    -- currently compiled function
   }
 
 -- The default options with empty internal options.
 defaultICOptions :: ICOptions
 defaultICOptions =
   ICOptions 1 False True "" "" False "evince" False False
-            (setQuiet True defaultParams) [] [] ("","")
+            (setQuiet True defaultParams) [] [] [] ("","")
 
 -- Sets the internal constructor and function maps from given lists.
-setConsFuns :: ICOptions -> [(QName,(IArity,Int))] -> [(QName,Int)] -> ICOptions
-setConsFuns opts conslist funlist =
-  opts { optConsMap = foldr addQMap [] conslist
-       , optFunMap  = foldr addQMap [] funlist
+setConsFuns :: ICOptions -> [(String, [(QName,(IArity,Int))])]
+            -> [(String, [(QName,Int)])] -> ICOptions
+setConsFuns opts modconslist modfunlist =
+  opts { optConsMap = foldr addIfNotPresent (optConsMap opts) modconslist
+       , optFunMap  = foldr addIfNotPresent (optFunMap  opts) modfunlist
+       , optModsMaps = union (map fst modconslist)
+                             (union (map fst modfunlist) (optModsMaps opts))
        }
+ where
+  addIfNotPresent (mn,nameinfos) infomap =
+    if mn `elem` optModsMaps opts
+      then infomap
+      else foldr addQMap infomap nameinfos
 
 -- Adds the info for a qualified name in a map.
 addQMap :: (QName,a) -> [(String, Map.Map String a)]

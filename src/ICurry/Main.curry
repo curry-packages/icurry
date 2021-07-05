@@ -2,7 +2,7 @@
 --- This module contains a simple compiler from FlatCurry to ICurry programs.
 ---
 --- @author Michael Hanus
---- @version March 2021
+--- @version July 2021
 ------------------------------------------------------------------------------
 
 module ICurry.Main where
@@ -26,7 +26,7 @@ import ICurry.Types
 banner :: String
 banner = unlines [bannerLine, bannerText, bannerLine]
  where
-  bannerText = "ICurry Compiler (Version of 08/03/21)"
+  bannerText = "ICurry Compiler (Version of 05/07/21)"
   bannerLine = take (length bannerText) (repeat '=')
 
 main :: IO ()

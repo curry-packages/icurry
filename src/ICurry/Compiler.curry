@@ -11,6 +11,7 @@
 
 module ICurry.Compiler
   ( icCompile, flatCurry2ICurry, flatCurry2ICurryWithProgs
+  , flatCurry2ICurryWithProgsAndOptions
   , ICOptions(..), defaultICOptions
   , printStatus, printIntermediate ) where
 
@@ -60,7 +61,19 @@ flatCurry2ICurry opts prog0 = flatCurry2ICurryWithProgs opts [] prog0
 --- It also reads the interfaces of imported modules, if not already
 --- provided, in order to access their data and function declarations.
 flatCurry2ICurryWithProgs :: ICOptions -> [Prog] -> Prog -> IO IProg
-flatCurry2ICurryWithProgs opts progs prog0 = do
+flatCurry2ICurryWithProgs opts impprogs prog =
+  flatCurry2ICurryWithProgsAndOptions opts impprogs prog >>= return . snd
+
+--- Translates a FlatCurry program into an ICurry program where
+--- some FlatCurry interfaces are provided.
+--- It also reads the interfaces of imported modules, if not already
+--- provided, in order to access their data and function declarations.
+--- The `ICOptions` after processing the program (containing the
+--- constructor and function maps required for the translation)
+--- are also returned.
+flatCurry2ICurryWithProgsAndOptions :: ICOptions -> [Prog] -> Prog
+                                    -> IO (ICOptions,IProg)
+flatCurry2ICurryWithProgsAndOptions opts progs prog0 = do
   let impmods = progImports prog0
   impprogs <- mapM getInterface impmods
   let prog      = elimNewtype impprogs prog0
@@ -72,16 +85,19 @@ flatCurry2ICurryWithProgs opts progs prog0 = do
   printDetails opts $ 
     textWithLines "Transformed FlatCurry program to be compiled:" ++
     pPrint (ppProg FlatCurry.Pretty.defaultOptions clprog)
-  let consmap   = concatMap consMapOfProg (prog : impprogs)
-      impfunmap = concatMap publicFunMapOfProg impprogs
-      pubfunmap = publicFunMapOfProg prog
-      funmap    = pubfunmap ++ privateFunMapOfProg clprog pubfunmap ++ impfunmap
-  let icprog = flat2icurry (setConsFuns opts consmap funmap) clprog
+  let consmap   = map consMapOfProg (prog : impprogs)
+      impfunmap = map publicFunMapOfProg impprogs
+      pubfunmap = snd (publicFunMapOfProg prog)
+      funmap    = (progName prog,
+                   pubfunmap ++ privateFunMapOfProg clprog pubfunmap) :
+                  impfunmap
+  let cmpopts = setConsFuns opts consmap funmap
+      icprog  = flat2icurry cmpopts clprog
   printIntermediate opts $
     textWithLines "Generated ICurry program:" ++
     pPrint (ppIProg icprog)
   printDetails opts (textWithLines "Generated ICurry file:" ++ showIProg icprog)
-  return icprog
+  return (cmpopts,icprog)
  where
   getInterface p =
     maybe (do printStatus opts $ "Read FlatCurry interface of '" ++ p ++ "'"
@@ -90,16 +106,18 @@ flatCurry2ICurryWithProgs opts progs prog0 = do
           (find (\fp -> progName fp == p) progs)
 
   consMapOfProg fcy =
-    concatMap (\ (_,cars) -> map (\ ((cname,car),pos) -> (cname,(car,pos)))
-                                 (zip cars [0..]))
-              (dataDeclsOf fcy)
+    (progName fcy,
+     concatMap (\ (_,cars) -> map (\ ((cname,car),pos) -> (cname,(car,pos)))
+                                  (zip cars [0..]))
+               (dataDeclsOf fcy))
 
   -- compute mapping of public function names to indices
   publicFunMapOfProg fcprog =
-    zip (map funcName
-             (filter (\f -> funcVisibility f == FlatCurry.Types.Public)
-                     (progFuncs fcprog)))
-        [0..]
+    (progName fcprog,
+     zip (map funcName
+              (filter (\f -> funcVisibility f == FlatCurry.Types.Public)
+                      (progFuncs fcprog)))
+         [0..])
 
   privateFunMapOfProg fcprog pubfunmap =
     zip (filter (\fn -> fn `notElem` map fst pubfunmap)
