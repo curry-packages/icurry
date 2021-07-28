@@ -26,7 +26,7 @@ import ICurry.Types
 banner :: String
 banner = unlines [bannerLine, bannerText, bannerLine]
  where
-  bannerText = "ICurry Compiler (Version of 05/07/21)"
+  bannerText = "ICurry Compiler (Version of 28/07/21)"
   bannerLine = take (length bannerText) (repeat '=')
 
 main :: IO ()
@@ -39,10 +39,12 @@ main = do
     _   -> error "Too many module names provided"
 
 checkExecutables :: ICOptions -> IO ()
-checkExecutables opts =
-  if null (optMain opts) || not (optShowGraph opts)
-    then return ()
-    else mapM_ checkExec ["dot", optViewPDF opts]
+checkExecutables opts = do
+  let execs = if null (optMain opts) || optShowGraph opts == 0
+                then []
+                else ["dot", optViewPDF opts] ++
+                     (if null (optOutput opts) then [] else ["pdftk"])
+  mapM_ checkExec execs
  where
   checkExec p = do
     exp <- fileInPath p
@@ -67,15 +69,9 @@ icurryOnModule opts modname = do
           printStatus opts $ "ICurry program written to '" ++ icyname ++ "'"
     else do
       printStatus opts $ "Executing main function '" ++ imain ++ "'..."
-      let opts1 = if optShowGraph opts
-                    then defOpts { withGraph = True, waitTime = 1
-                                 , withViewer = optViewPDF opts }
-                    else defOpts
-          opts2 = if optInteractive opts
-                    then if optShowGraph opts
-                           then opts1 { interactive = True, verbosity = 2 }
-                           else opts1 { interactive = True }
-                    else opts1
-      execIProg opts2 iprog imain
+      let iopts1 = defOpts { icOptions = opts }
+          iopts2 = if optShowGraph opts > 0 then iopts1 { waitTime = 1 }
+                                            else iopts1
+      execIProg iopts2 iprog imain
 
 ------------------------------------------------------------------------------

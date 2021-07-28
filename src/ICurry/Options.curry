@@ -32,7 +32,9 @@ data ICOptions = ICOptions
   , optLift        :: Bool   -- should nested cases/lets be lifted to top-level?
   , optOutput      :: String -- name of output file (or null)
   , optMain        :: String -- name of main function
-  , optShowGraph   :: Bool   -- visualize graph during execution?
+  , optShowGraph   :: Int    -- level to visualize graph during execution:
+                             -- 0: do not show, 1: show graph,
+                             -- 2: show full graph, 3: show full with node IDs
   , optViewPDF     :: String -- command to view graph PDF
   , optInteractive :: Bool   -- interactive execution?
   , optVarDecls    :: Bool   -- optimize variable declarations?
@@ -51,7 +53,7 @@ data ICOptions = ICOptions
 -- The default options with empty internal options.
 defaultICOptions :: ICOptions
 defaultICOptions =
-  ICOptions 1 False True "" "" False "evince" False False
+  ICOptions 1 False True "" "" 0 "evince" False False
             (setQuiet True defaultParams) [] [] [] ("","")
 
 -- Sets the internal constructor and function maps from given lists.
@@ -154,16 +156,20 @@ options =
   , Option "o" ["output"]
            (ReqArg (\s opts -> opts { optOutput = s }) "<f>")
            ("output file for ICurry program (or '-')\n(otherwise: store in " ++
-            currySubdir ++ "/MOD.icy)")
+            currySubdir ++ "/MOD.icy)\nor PDF containing term graphs (with option '-g')")
   , Option "m" ["main"]
            (ReqArg (\s opts -> opts { optMain = s }) "<f>")
            "name of the main function to be interpreted\n(otherwise the ICurry program is stored)"
   , Option "g" ["graph"]
-           (NoArg (\opts -> opts { optShowGraph = True }))
-           "show the term graph during execution\n(requires 'dot' and 'evince')"
+            (OptArg (maybe (checkGraph 1) (safeReadNat checkGraph)) "<n>")
+            ("level to visualize term graph during execution:\n" ++
+             "0: do not show term graph\n" ++
+             "1: show term graph (same as `-g`)\n   (requires 'dot' and '" ++
+            viewer ++ "')\n" ++
+             "2: show full term graph\n3: show full graph with node IDs")
   , Option "" ["viewer"]
            (ReqArg (\s opts -> opts { optViewPDF = s }) "<c>")
-           "command to view PDF files (default: 'evince')"
+           ("command to view PDF files (default: '" ++ viewer ++ "')")
   , Option "i" ["interactive"]
            (NoArg (\opts -> opts { optInteractive = True }))
            "interactive execution (ask after each step/result)"
@@ -175,13 +181,19 @@ options =
            "do not generate variable declarations when\nvariables are introduced by assignments"
   ]
  where
+  viewer = optViewPDF defaultICOptions
+
   safeReadNat opttrans s opts = case readNat s of
     [(n,"")] -> opttrans n opts
     _        -> error "Illegal number argument (try `-h' for help)"
 
   checkVerb n opts = if n>=0 && n<4
-                     then opts { optVerb = n }
-                     else error "Illegal verbosity level (try `-h' for help)"
+                       then opts { optVerb = n }
+                       else error "Illegal verbosity level (try `-h' for help)"
+
+  checkGraph n opts = if n>=0 && n<4
+                        then opts { optShowGraph = n }
+                        else error "Illegal graph level (try `-h' for help)"
 
 ------------------------------------------------------------------------------
 -- Auxiliaries:

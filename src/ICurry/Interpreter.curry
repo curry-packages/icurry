@@ -7,37 +7,36 @@
 ---    argument index is contained in the demand information of the function.
 ---
 --- @author Michael Hanus
---- @version November 2020
+--- @version July 2021
 ------------------------------------------------------------------------------
 
 module ICurry.Interpreter
  where
 
-import Control.Monad  ( when )
+import Control.Monad  ( when, unless )
 import Data.List      ( init, isPrefixOf, last, replace )
 import System.Process ( sleep, system )
 
 import ICurry.Types
 import ICurry.Graph
-import ICurry.Compiler ( defaultICOptions, icCompile )
+import ICurry.Compiler ( icCompile )
+import ICurry.Options  ( ICOptions(..), defaultICOptions )
 
 ------------------------------------------------------------------------------
 -- The options of the ICurry interpreter.
 data IOptions = IOptions
-  { verbosity   :: Int    -- verbosity: 0=quiet, 4=all
-  , showAllExps :: Bool   -- show all expressions represented by the graph
-  , withGraph   :: Bool   -- should we visualize the graph?
-  , withViewer  :: String -- program to view PDFs (default: "evince")
-  , fullGraph   :: Bool   -- should we show the full graph with all nodes?
-  , interactive :: Bool   -- ask user to proceed after each step?
-  , waitTime    :: Int    -- seconds to wait in non-interactive mode
-  , makePDF     :: Bool   -- generates a PDF containing all graph steps
-  , stepNum     :: Int    -- step number (internal)
+  { icOptions   :: ICOptions -- inherit options of the ICurry compiler
+  , showAllExps :: Bool      -- show all expressions represented by the graph
+  , waitTime    :: Int       -- seconds to wait in non-interactive mode
+  , stepNum     :: Int       -- step number (internal)
   }
 
 -- Default options: quiet non-interactive mode
 defOpts :: IOptions
-defOpts = IOptions 0 False False "evince" False False 0 False 0
+defOpts = IOptions defaultICOptions False 0 0
+
+withGraph :: IOptions -> Int
+withGraph opts = optShowGraph (icOptions opts)
 
 ------------------------------------------------------------------------------
 
@@ -112,27 +111,28 @@ addResult nid st = st { results = results st ++ [nid], currResult = Just nid }
 -- Print the current state of the interpreter according to the given options.
 printState :: IOptions -> State -> IO ()
 printState opts st = do
-  when (verb>3) $ putStr $ unlines
+  when (verb > 2) $ putStr $ unlines
     [ "RAW GRAPH   : " ++ show (graph st)
     , "TASKS       : " ++ show tsks
     ]
   when (showAllExps opts) $ putStr $ unlines $
     "ALL EXPRESSIONS:" : map (showGraphExp (graph st)) (rootsOfState st)
-  when (verb>0) $
+  when (verb > 1) $
     case tsks of
-      [] -> putStrLn "NO TASK"
+      []                       -> putStrLn "NO TASK"
       tsk@(Task ctrl _ fp) : _ -> putStr $ unlines $
         [ "CURRENT TASK:"
         , "MAIN EXPR   : " ++ showGraphExp (graph st) (rootOfTask tsk) ] ++
-        if (verb>1)
-          then [ "CONTROL     : " ++ showControl ctrl
-               , "FINGER PRINT: " ++ show fp ]
-          else []
-  when (withGraph opts || makePDF opts) $ showStateGraph
-  when (waitTime opts > 0 && not (interactive opts)) $ sleep (waitTime opts)
-  when (verb>0) $ putStrLn ""
+        if verb > 2 then [ "CONTROL     : " ++ showControl ctrl
+                         , "FINGER PRINT: " ++ show fp ]
+                    else []
+  when (withGraph opts > 0 ||
+        not (null (optOutput (icOptions opts)))) $ showStateGraph
+  when (waitTime opts > 0 && not (optInteractive (icOptions opts))) $
+    sleep (waitTime opts)
+  when (verb > 1) $ putStrLn ""
  where
-  verb = verbosity opts
+  verb = optVerb (icOptions opts)
   tsks = tasks st
 
   showControl (CNode nid) = "NODE: " ++ show nid
@@ -149,7 +149,8 @@ printState opts st = do
                   (zip [1..] tsks)) ++
           map (\n -> (n,[("color","green"),("style","filled")])) (results st)
     viewDot Nothing (stepNum opts)
-            (graphToDot (graph st) ndcolors (verb > 3) (fullGraph opts))
+            (graphToDot (graph st) ndcolors (withGraph opts > 2)
+                        (withGraph opts > 1))
    where
     markCurrent cn [] = [(cn, yellowFill)]
     markCurrent cn ((nid,nas) : ncs)
@@ -170,7 +171,7 @@ The following coloring is used in the graph:
 
 askProceed :: IOptions -> IO Bool
 askProceed opts =
-  if interactive opts
+  if optInteractive (icOptions opts)
     then do putStr "Proceed (<RET>) or abort (a)? "
             ans <- getLine
             if null ans
@@ -197,22 +198,25 @@ execProg opts progname fname = do
 -- It also prints intermediate steps, PDFs, etc. accordding to the options.
 execIProg :: IOptions -> IProg -> String -> IO ()
 execIProg opts (IProg _ _ _ ifuns) f = do
-  let (g,ni) = addNode (FuncNode f []) emptyGraph
-      opts1  = if makePDF opts then opts { stepNum = 1, withGraph = False }
-                               else opts
-  when (withGraph opts1) $
-    viewDot (Just $ withViewer opts) 0 (graphToDot g [] (verbosity opts1 > 3)
-            (fullGraph opts))
+  let (g,ni)  = addNode (FuncNode f []) emptyGraph
+      pdfmain = optOutput (icOptions opts)
+      opts1   = if null pdfmain
+                  then opts
+                  else opts { icOptions = (icOptions opts) { optShowGraph = 0 }
+                            , stepNum = 1 }
+  when (withGraph opts1 > 0) $
+    viewDot (Just $ optViewPDF (icOptions opts)) 0 (graphToDot g []
+            (withGraph opts1 > 2)
+            (withGraph opts1 > 1))
   let allfuns = ifuns ++ standardFuncs
   opts2 <- runWith opts1 (initState allfuns g ni)
-  when (makePDF opts2) $ do
+  unless (null pdfmain) $ do
     -- Concatenate all step PDFs into on PDF:
     let pdffiles = map (\i -> "ICURRYDOT" ++ show i ++ ".pdf")
                        [1 .. stepNum opts2]
-        pdfmain  = "ICURRYSTEPS.pdf"
-    system $ unwords $ "pdftk" : pdffiles ++ ["cat","output",pdfmain]
+    system $ unwords $ "pdftk" : pdffiles ++ ["cat", "output", pdfmain]
     system $ unwords $ "/bin/rm -f" : pdffiles
-    putStrLn $ "PDFs of all steps written to file '" ++ pdfmain ++ "'."
+    putStrLn $ "PDFs of all steps written to '" ++ pdfmain ++ "'."
 
 runWith :: IOptions -> State -> IO IOptions
 runWith opts st
@@ -221,7 +225,8 @@ runWith opts st
        return opts
   | otherwise
   = do printState opts st
-       procstep <- if verbosity opts > 0 then askProceed opts else return True
+       procstep <- if optVerb (icOptions opts) > 0 then askProceed opts
+                                                   else return True
        if not procstep
          then return opts
          else do
