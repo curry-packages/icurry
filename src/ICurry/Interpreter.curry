@@ -117,6 +117,10 @@ printState opts st = do
     ]
   when (showAllExps opts) $ putStr $ unlines $
     "ALL EXPRESSIONS:" : map (showGraphExp (graph st)) (rootsOfState st)
+  when (verb == 1) $ case tsks of
+    []    -> putStrLn "NO TASK"
+    tsk:_ -> putStr $ unlines $
+               [ "CURRENT EXPR: " ++ showGraphExp (graph st) (rootOfTask tsk) ]
   when (verb > 1) $
     case tsks of
       []                       -> putStrLn "NO TASK"
