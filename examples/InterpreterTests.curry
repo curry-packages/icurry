@@ -295,23 +295,26 @@ exampleProg = IProg "Example" [] [] allFuns
 quiet :: IOptions
 quiet = defOpts
 
+execExample :: IOptions -> String -> IO ()
+execExample o mainfun = execIProg o exampleProg mainfun >> return ()
+
 m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12, m13, m14, m15
   :: IOptions -> IO ()
-m1 o = execIProg o exampleProg "coin"
-m2 o = execIProg o exampleProg "headempty"
-m3 o = execIProg o exampleProg "head1"
-m4 o = execIProg o exampleProg "head12"
-m5 o = execIProg o exampleProg "xorSelfBool"
-m6 o = execIProg o exampleProg "xorSelfDollarBangBool"
-m7 o = execIProg o exampleProg "xorSelfSeqBool"
-m8 o = execIProg o exampleProg "andNotFalse"
-m9 o = execIProg o exampleProg "headOneTwo"
-m10 o = execIProg o exampleProg "coinList"
-m11 o = execIProg o exampleProg "coinCoinList"
-m12 o = execIProg o exampleProg "perm123"
-m13 o = execIProg o exampleProg "idTrue"
-m14 o = execIProg o exampleProg "notBool"
-m15 o = execIProg o exampleProg "notFree"
+m1 o = execExample o "coin"
+m2 o = execExample o "headempty"
+m3 o = execExample o "head1"
+m4 o = execExample o "head12"
+m5 o = execExample o "xorSelfBool"
+m6 o = execExample o "xorSelfDollarBangBool"
+m7 o = execExample o "xorSelfSeqBool"
+m8 o = execExample o "andNotFalse"
+m9 o = execExample o "headOneTwo"
+m10 o = execExample o "coinList"
+m11 o = execExample o "coinCoinList"
+m12 o = execExample o "perm123"
+m13 o = execExample o "idTrue"
+m14 o = execExample o "notBool"
+m15 o = execExample o "notFree"
 
 ------------------------------------------------------------------------------
 -- Testing with CurryCheck.
