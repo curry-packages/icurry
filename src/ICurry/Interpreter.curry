@@ -6,8 +6,8 @@
 --- 2. If there is a case expression, it is on some argument and the
 ---    argument index is contained in the demand information of the function.
 ---
---- @author Michael Hanus
---- @version July 2021
+--- @author Michael Hanus, Sascha Ecks
+--- @version July 2022
 ------------------------------------------------------------------------------
 
 module ICurry.Interpreter
@@ -21,6 +21,7 @@ import ICurry.Types
 import ICurry.Graph
 import ICurry.Compiler ( icCompile )
 import ICurry.Options  ( ICOptions(..), defaultICOptions )
+import qualified TermGraph.XML as TG
 
 ------------------------------------------------------------------------------
 -- The options of the ICurry interpreter.
@@ -92,6 +93,8 @@ data State = State { program :: [IFunction]
                    }
  deriving Show
 
+
+
 -- Initial state for a program, graph, and root node id.
 initState :: [IFunction] -> Graph -> NodeID -> State
 initState prog graph nid = State prog graph [Task (CNode nid) [] []] [] Nothing
@@ -107,6 +110,22 @@ showResults st = unlines (map (showGraphExp (graph st)) (results st))
 -- Adds a result to a program state.
 addResult :: NodeID -> State -> State
 addResult nid st = st { results = results st ++ [nid], currResult = Just nid }
+
+getTGState :: ICOptions -> State -> [TG.State]
+getTGState icopts st
+  | optTermGraph icopts = case (tasks st) of
+    (Task (CNode nid) _ fp) : _ -> [ TG.State
+                                        (reachableGraph (graph st) [graphRoot (graph st)])
+                                        nid
+                                        (results st)
+                                        fp ]
+    []                          -> [ TG.State
+                                        (reachableGraph (graph st) [graphRoot (graph st)])
+                                        0
+                                        (results st)
+                                        [] ]
+    _                           -> []
+  | otherwise = []
 
 -- Print the current state of the interpreter according to the given options.
 printState :: IOptions -> State -> IO ()
@@ -191,7 +210,7 @@ askProceed opts =
 -- The program name and the unqualified name of the main function
 -- must be provided as string arguments.
 -- It also prints intermediate steps, PDFs, etc. accordding to the options.
-execProg :: IOptions -> String -> String -> IO ()
+execProg :: IOptions -> String -> String -> IO ([TG.State])
 execProg opts progname fname = do
   iprog <- icCompile defaultICOptions progname
   execIProg opts iprog fname
@@ -200,7 +219,7 @@ execProg opts progname fname = do
 -- Executes a program with a main function where the name is provided
 -- as a string.
 -- It also prints intermediate steps, PDFs, etc. accordding to the options.
-execIProg :: IOptions -> IProg -> String -> IO ()
+execIProg :: IOptions -> IProg -> String -> IO ([TG.State])
 execIProg opts (IProg _ _ _ ifuns) f = do
   let (g,ni)  = addNode (FuncNode f []) emptyGraph
       pdfmain = optOutput (icOptions opts)
@@ -213,7 +232,7 @@ execIProg opts (IProg _ _ _ ifuns) f = do
             (withGraph opts1 > 2)
             (withGraph opts1 > 1))
   let allfuns = ifuns ++ standardFuncs
-  opts2 <- runWith opts1 (initState allfuns g ni)
+  (opts2,states) <- runWith opts1 (initState allfuns g ni) []
   unless (null pdfmain) $ do
     -- Concatenate all step PDFs into on PDF:
     let pdffiles = map (\i -> "ICURRYDOT" ++ show i ++ ".pdf")
@@ -221,29 +240,34 @@ execIProg opts (IProg _ _ _ ifuns) f = do
     system $ unwords $ "pdftk" : pdffiles ++ ["cat", "output", pdfmain]
     system $ unwords $ "/bin/rm -f" : pdffiles
     putStrLn $ "PDFs of all steps written to '" ++ pdfmain ++ "'."
+  return states
 
-runWith :: IOptions -> State -> IO IOptions
-runWith opts st
+runWith :: IOptions -> State -> [TG.State] -> IO (IOptions, [TG.State])
+runWith opts st states
   | null (tasks st)
   = do printState opts st
-       return opts
+       let nstates = states ++ (getTGState (icOptions opts) st)
+       return (opts, nstates)
   | otherwise
   = do printState opts st
+       let nstates = states ++ (getTGState (icOptions opts) st)
        procstep <- if optVerb (icOptions opts) > 0 then askProceed opts
                                                    else return True
        if not procstep
-         then return opts
+         then return (opts, nstates)
          else do
            let num   = stepNum opts
                nopts = if num==0 then opts else opts { stepNum = num + 1 }
                nst   = step st
-           maybe (runWith nopts nst)
+           maybe (runWith nopts nst nstates)
                  (\nid -> do putStrLn $ "RESULT: " ++
                                         showGraphExp (graph nst) nid
                              proceed <- askProceed opts
                              if proceed
-                               then runWith nopts nst {currResult = Nothing}
-                               else return opts)
+                               then runWith nopts
+                                            (nst {currResult = Nothing})
+                                            nstates
+                               else return (opts, nstates))
                  (currResult nst)
 
 -- Evaluates a 0-ary function w.r.t. an ICurry program and returns
@@ -328,22 +352,22 @@ evalFirstTask st (Task (IBlockEnv (IBlock vs asgns stm) ienv) stk fp : tsks) =
       (g1,ienv1) = addAssigns g0 ienv0 asgns in
   case stm of
     IExempt -> st { tasks = tsks }  -- failure: remove current task
-  
+
     IReturn iexp -> -- return statement: replace current ROOT node
       let (g2,nexp)  = extendGraph g1 ienv1 iexp
           rootid     = lookupInEnv 0 ienv
       in either (\ni -> st { graph = replaceNode g2 rootid ni,
-                             tasks = Task (CNode ni) stk fp : tsks })
+                                         tasks = Task (CNode ni) stk fp : tsks })
                 (\nd -> st { graph = updateNode g2 rootid nd,
                              tasks = Task (CNode rootid) stk fp : tsks })
                 nexp
-  
+
     ICaseCons cv branches -> -- constructor case: select branch
       let bn    = lookupInEnv cv ienv1
           sb    = selectConsBranch (lookupNode bn g1) branches
       in st { graph = g1
             , tasks = Task (IBlockEnv sb ienv1) stk fp : tsks }
-  
+
     ICaseLit cv branches -> -- literal case: select branch
       let bn = lookupInEnv cv ienv1
           sb = selectLitBranch (lookupNode bn g1) branches

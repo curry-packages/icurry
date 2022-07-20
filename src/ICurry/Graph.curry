@@ -1,8 +1,8 @@
 ------------------------------------------------------------------------------
 --- An implementation of term graphs used by the ICurry interpreter.
 ---
---- @author Michael Hanus
---- @version January 2021
+--- @author Michael Hanus, Sascha Ecks
+--- @version January 2022
 ------------------------------------------------------------------------------
 
 module ICurry.Graph
@@ -71,6 +71,13 @@ nodeLabel (PartNode f _ _)     = f
 nodeLabel (ChoiceNode cid _ _) = "?" ++ show cid
 nodeLabel FreeNode             = "free"
 
+nodeChildren :: Node -> [NodeID]
+nodeChildren (FuncNode _ cs)       = cs
+nodeChildren (ConsNode _ cs)       = cs
+nodeChildren (PartNode _ _ cs)     = cs
+nodeChildren (ChoiceNode _ c1 c2) = [c1, c2]
+nodeChildren FreeNode              = []
+
 -- Add an argument node to a node representing a partial call.
 addPartialArg :: Node -> NodeID -> Node
 addPartialArg pnode arg = case pnode of
@@ -87,33 +94,37 @@ addPartialArg pnode arg = case pnode of
   _ -> error "addPartialArg: node does not contain partial call"
 
 
--- A graph is implemented as a list of nodes together with a maximum NodeID.
-data Graph = Graph [(NodeID,Node)] NodeID
+-- A graph is implemented as a list of nodes together with a maximum NodeID
+-- and a current root (only necessary for visualization).
+data Graph = Graph [(NodeID,Node)] NodeID NodeID
  deriving Show
 
 -- An empty graph contains only a "null" node with node id 0.
 emptyGraph :: Graph
-emptyGraph = Graph [(0, ConsNode "null" [])] 1
+emptyGraph = Graph [(0, ConsNode "null" [])] 1 1
 
 -- Looks up a node in a graph (where redirections are considered).
 lookupNode :: NodeID -> Graph -> Node
-lookupNode ni (Graph nodes _) =
+lookupNode ni (Graph nodes _ _) =
   maybe (error $ "Node with id `" ++ show ni ++ "` not found!")
         id
         (lookup ni nodes)
 
+graphRoot :: Graph -> NodeID
+graphRoot (Graph _ _ nid) = nid
+
 -- Returns maximum node id of a graph.
 maxNodeID :: Graph -> NodeID
-maxNodeID (Graph _ m) = m
+maxNodeID (Graph _ m _) = m
 
 -- Adds a new node in a graph.
 addNode :: Node -> Graph -> (Graph,NodeID)
-addNode node (Graph nodes mx) =
-  (Graph (nodes ++ [(mx,node)]) (mx + 1), mx)
+addNode node (Graph nodes mx root) =
+  (Graph (nodes ++ [(mx,node)]) (mx + 1) root, mx)
 
 -- Updates a node in a graph with new node information.
 updateNode :: Graph -> NodeID -> Node -> Graph
-updateNode (Graph nodes mx) nid newnode = Graph (map update nodes) mx
+updateNode (Graph nodes mx root) nid newnode = Graph (map update nodes) mx root
  where
   update (ni, n) | ni == nid = (ni, newnode)
                  | otherwise = (ni, n)
@@ -123,10 +134,11 @@ updateNode (Graph nodes mx) nid newnode = Graph (map update nodes) mx
 -- Thus, all edges with target `n1` are redirected to target `n2`.
 -- Furthermore, node `n1` is deleted from the graph since it is garbage.
 replaceNode :: Graph -> NodeID -> NodeID -> Graph
-replaceNode (Graph nodes mx) oldnid newid =
-  Graph (filter ((/= oldnid) . fst) . map redirect $ nodes) mx
+replaceNode (Graph nodes mx root) oldnid newid =
+  Graph (filter ((/= oldnid) . fst) . map redirect $ nodes) mx newroot
  where
   redirect (ni, n) = (ni, redirectTargets n)
+  newroot = if root == oldnid then newid else root
 
   redirectTargets (FuncNode f ns)      = FuncNode f (map redirectTarget ns)
   redirectTargets (ConsNode f ns)      = ConsNode f (map redirectTarget ns)
@@ -200,7 +212,7 @@ showGraphExp g nid = showExp [] 10 nid
         ChoiceNode _ a1 a2 -> occursInGraphExp (d-1) ni a1 +
                               occursInGraphExp (d-1) ni a2
         FreeNode           -> 0
-    
+
 
 -- Transforms a graph (w.r.t. given node attributes) into a dot graph.
 -- If the third argument is True, node ids will be shown in the node labels.
@@ -215,7 +227,7 @@ graphToDot gr ndattrs withnids showall =
 -- Transforms a graph (w.r.t. given node attributes) into a dot graph.
 -- If the third argument is True, node ids will be shown in the node labels.
 fullGraphToDot :: Graph -> [(NodeID,[(String,String)])] -> Bool -> DotGraph
-fullGraphToDot (Graph nodes _) ndattrs withnids =
+fullGraphToDot (Graph nodes _ _) ndattrs withnids =
   dgraph "Graph" (concatMap toNode nodes) (concatMap toEdges nodes)
  where
   toNode (nid,n) = [Dot.Node (show nid) ([("label", ndlabel)] ++ addAttrs)]
@@ -236,9 +248,9 @@ fullGraphToDot (Graph nodes _) ndattrs withnids =
 -- "Garbage collection" on a graph: remove all nodes (and their outgoing edges)
 -- which are not reachable from a given list of nodes.
 reachableGraph :: Graph -> [NodeID] -> Graph
-reachableGraph (Graph nodes mx) initnids =
+reachableGraph (Graph nodes mx rt) initnids =
   let rnodes = reachableNodes initnids
-  in Graph (filter ((`elem` rnodes) . fst) nodes) mx
+  in Graph (filter ((`elem` rnodes) . fst) nodes) mx rt
  where
   reachableNodes nids =
      let newts = nub . filter (`notElem` nids) . concatMap targets $ nids

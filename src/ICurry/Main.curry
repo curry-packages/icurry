@@ -1,8 +1,8 @@
 ------------------------------------------------------------------------------
 --- This module contains a simple compiler from FlatCurry to ICurry programs.
 ---
---- @author Michael Hanus
---- @version July 2021
+--- @author Michael Hanus, Sascha Ecks
+--- @version July 2022
 ------------------------------------------------------------------------------
 
 module ICurry.Main where
@@ -15,6 +15,11 @@ import ReadShowTerm          ( showTerm )
 import System.CurryPath      ( runModuleAction )
 import System.Path           ( fileInPath )
 import System.Process        ( exitWith )
+import System.Directory      ( createDirectoryIfMissing )
+
+import XML                   ( XmlExp(..), xml, writeXmlFile )
+import TermGraph.XML         ( states2XmlGraphs )
+import TermGraph.SVG         ( graphs2Svgs, graphSvg, treeSvg )
 
 import ICurry.Compiler
 import ICurry.Files
@@ -26,7 +31,7 @@ import ICurry.Types
 banner :: String
 banner = unlines [bannerLine, bannerText, bannerLine]
  where
-  bannerText = "ICurry Compiler (Version of 28/07/21)"
+  bannerText = "ICurry Compiler (Version of 20/07/22)"
   bannerLine = take (length bannerText) (repeat '=')
 
 main :: IO ()
@@ -72,6 +77,21 @@ icurryOnModule opts modname = do
       let iopts1 = defOpts { icOptions = opts }
           iopts2 = if optShowGraph opts > 0 then iopts1 { waitTime = 1 }
                                             else iopts1
-      execIProg iopts2 iprog imain
+      states <- execIProg iopts2 iprog imain
+      let xmlgraphs = states2XmlGraphs states
+      when (optTermGraph opts && (not $ null $ optXMLOutput opts)) $
+        writeXmlFile (((++ ".xml") . optXMLOutput) opts) xmlgraphs
+      when (optTermGraph opts && (not $ null $ optGraphOutput opts)) $ do
+        createDirectoryIfMissing True (optGraphOutput opts)
+        graphs2Svgs (optShowNodeIDs opts)
+                    (graphSvg Nothing)
+                    ((optGraphOutput opts) ++ "/img")
+                    states
+      when (optTermGraph opts && (not $ null $ optTreeOutput opts)) $ do
+        createDirectoryIfMissing True (optTreeOutput opts)
+        graphs2Svgs (optShowNodeIDs opts)
+                    (treeSvg (optTreeDepth opts) Nothing)
+                    ((optTreeOutput opts) ++ "/img")
+                    states
 
 ------------------------------------------------------------------------------

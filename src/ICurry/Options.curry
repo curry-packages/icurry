@@ -1,8 +1,8 @@
 ------------------------------------------------------------------------------
 --- Definition and processing of options for the ICurry compiler.
 ---
---- @author Michael Hanus
---- @version July 2021
+--- @author Michael Hanus, Sascha Ecks
+--- @version July 2022
 ------------------------------------------------------------------------------
 
 module ICurry.Options
@@ -11,6 +11,7 @@ module ICurry.Options
 import Control.Monad         ( when, unless )
 import Data.List             ( union )
 import Numeric               ( readNat )
+import Data.Maybe            ( fromMaybe )
 import System.Console.GetOpt
 
 import qualified Data.Map as Map
@@ -20,6 +21,7 @@ import System.CurryPath      ( currySubdir )
 import System.Directory      ( getAbsolutePath )
 import System.FrontendExec   ( FrontendParams, defaultParams, setQuiet )
 import System.Process        ( exitWith )
+
 
 ------------------------------------------------------------------------------
 --- Options for the ICurry compiler.
@@ -48,13 +50,19 @@ data ICOptions = ICOptions
    -- map qualified function names to indices:
   , optFunMap      :: [(String, Map.Map String Int)]
   , optFun         :: QName    -- currently compiled function
+  , optTermGraph   :: Bool     -- generate term graph representation
+  , optXMLOutput   :: String   -- name of output file for XML term graph
+  , optGraphOutput :: String   -- name of output file for SVG term graphs
+  , optTreeOutput  :: String   -- name of output file for SVG tree graphs
+  , optShowNodeIDs :: Bool     -- should node-labels in SVGs contain NodeIDs?
+  , optTreeDepth   :: Int      -- max Depth for tree visualization
   }
 
 -- The default options with empty internal options.
 defaultICOptions :: ICOptions
 defaultICOptions =
   ICOptions 1 False True "" "" 0 "evince" False False
-            (setQuiet True defaultParams) [] [] [] ("","")
+            (setQuiet True defaultParams) [] [] [] ("","") False "" "" "" False 10
 
 -- Sets the internal constructor and function maps from given lists.
 setConsFuns :: ICOptions -> [(String, [(QName,(IArity,Int))])]
@@ -179,6 +187,27 @@ options =
   , Option "" ["optvardecls"]
            (NoArg (\opts -> opts { optVarDecls = True }))
            "do not generate variable declarations when\nvariables are introduced by assignments"
+  , Option "" ["graphxml"]
+           (OptArg (\s opts -> opts { optTermGraph = True
+                                , optXMLOutput = (fromMaybe "icurryGraph" s) })
+                   "<f>")
+           "store XML representation of term graphs\nfor each computation step in file <f>.xml"
+  , Option "" ["graphsvg"]
+           (OptArg (\s opts -> opts { optTermGraph = True
+                             , optGraphOutput = (fromMaybe "icurryGraphs" s) })
+                   "<d>")
+           "store SVG representations of term graphs\nfor each computation step in directory <d>"
+  , Option "" ["treesvg"]
+           (OptArg (\s opts -> opts { optTermGraph = True
+                                , optTreeOutput = (fromMaybe "icurryTree" s) })
+                   "<d>")
+           "store SVG representations of term graphs as trees\nfor each computation step in directory <d>"
+  , Option "" ["shownodeids"]
+           (NoArg (\opts -> opts { optShowNodeIDs = True }))
+           "show NodeIDs in visualized graphs"
+  , Option "" ["maxdepth"]
+           (ReqArg (safeReadNat checkDepth) "<n>")
+           "max depth for tree visualization, default is 10"
   ]
  where
   viewer = optViewPDF defaultICOptions
@@ -194,6 +223,11 @@ options =
   checkGraph n opts = if n>=0 && n<4
                         then opts { optShowGraph = n }
                         else error "Illegal graph level (try `-h' for help)"
+
+  checkDepth n opts = if n>=0
+                        then opts { optTreeDepth = n }
+                        else error "Illegal max depth (try `-h' for help)"
+
 
 ------------------------------------------------------------------------------
 -- Auxiliaries:
