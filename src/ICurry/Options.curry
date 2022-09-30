@@ -56,13 +56,14 @@ data ICOptions = ICOptions
   , optTreeOutput  :: String   -- name of output file for SVG tree graphs
   , optShowNodeIDs :: Bool     -- should node-labels in SVGs contain NodeIDs?
   , optTreeDepth   :: Int      -- max Depth for tree visualization
+  , optMaxSteps    :: Int      -- max number of computation steps
   }
 
 -- The default options with empty internal options.
 defaultICOptions :: ICOptions
 defaultICOptions =
   ICOptions 1 False True "" "" 0 "evince" False False
-            (setQuiet True defaultParams) [] [] [] ("","") False "" "" "" False 10
+            (setQuiet True defaultParams) [] [] [] ("","") False "" "" "" False 10 (-1)
 
 -- Sets the internal constructor and function maps from given lists.
 setConsFuns :: ICOptions -> [(String, [(QName,(IArity,Int))])]
@@ -208,6 +209,9 @@ options =
   , Option "" ["maxdepth"]
            (ReqArg (safeReadNat checkDepth) "<n>")
            "max depth for tree visualization, default is 10"
+  , Option "" ["maxsteps"]
+           (ReqArg (safeReadNat checkMaxSteps) "<n>")
+           "max number of computation steps, default is 100"
   ]
  where
   viewer = optViewPDF defaultICOptions
@@ -228,6 +232,9 @@ options =
                         then opts { optTreeDepth = n }
                         else error "Illegal max depth (try `-h' for help)"
 
+  checkMaxSteps n opts = if n>0
+                        then opts { optMaxSteps = n }
+                        else error "Illegal max steps (try `-h' for help)"
 
 ------------------------------------------------------------------------------
 -- Auxiliaries:

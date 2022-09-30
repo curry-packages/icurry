@@ -244,6 +244,9 @@ execIProg opts (IProg _ _ _ ifuns) f = do
 
 runWith :: IOptions -> State -> [TG.State] -> IO (IOptions, [TG.State])
 runWith opts st states
+  | optMaxSteps (icOptions opts) == length states
+  = do printState opts st
+       return (opts, states)
   | null (tasks st)
   = do printState opts st
        let nstates = states ++ (getTGState (icOptions opts) st)

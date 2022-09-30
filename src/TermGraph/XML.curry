@@ -2,7 +2,7 @@
 --- Operations to transform ICurry graphs into XML representation.
 ---
 --- @author Sascha Ecks
---- @version July 2022
+--- @version September 2022
 ------------------------------------------------------------------------------
 
 module TermGraph.XML
@@ -10,7 +10,7 @@ module TermGraph.XML
 
 import ICurry.Graph
 import XML
-import Data.Maybe   (fromJust)
+import Data.Maybe   (fromMaybe)
 import Data.List    (nub)
 
 -- The finger print is a partial mapping from choice identifiers to integers.
@@ -97,12 +97,16 @@ lookupChoiceNodeIds ((nid,n):nodes) cid = case n of
 choiceReachableFrom :: [(NodeID,Node)] -> FingerPrint -> [NodeID] -> NodeID -> NodeID -> Bool
 choiceReachableFrom graph cms visited toNId fromNId
     | fromNId == toNId = True
-    | otherwise        = let node = fromJust $ lookup fromNId graph
+    | otherwise        = let node = fromMaybe
+                                    (error "choiceReachableFrom: Reached a node that is not in the graph")
+                                    (lookup fromNId graph)
                              newvis = fromNId : visited
                           in case node of
                             ChoiceNode cid c1 c2
-                              | fromJust (lookup cid cms) == 1 -> choiceReachableFrom graph cms newvis toNId c1
-                              | fromJust (lookup cid cms) == 2 -> choiceReachableFrom graph cms newvis toNId c2
+                              | chDst == 1 -> choiceReachableFrom graph cms newvis toNId c1
+                              | chDst == 2 -> choiceReachableFrom graph cms newvis toNId c2
+                              | otherwise  -> False
+                              where chDst = fromMaybe 0 (lookup cid cms)
                             _ -> or $ map (choiceReachableFrom graph cms newvis toNId) (nub $ nodeChildren node)
 
 xmlEntry :: String -> String -> XmlExp
