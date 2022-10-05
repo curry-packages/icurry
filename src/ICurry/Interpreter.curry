@@ -7,7 +7,7 @@
 ---    argument index is contained in the demand information of the function.
 ---
 --- @author Michael Hanus, Sascha Ecks
---- @version July 2022
+--- @version October 2022
 ------------------------------------------------------------------------------
 
 module ICurry.Interpreter
@@ -114,18 +114,11 @@ addResult nid st = st { results = results st ++ [nid], currResult = Just nid }
 getTGState :: ICOptions -> State -> [TG.State]
 getTGState icopts st
   | optTermGraph icopts = case (tasks st) of
-    (Task (CNode nid) _ fp) : _ -> [ TG.State
-                                        (reachableGraph (graph st) [graphRoot (graph st)])
-                                        nid
-                                        (results st)
-                                        fp ]
-    []                          -> [ TG.State
-                                        (reachableGraph (graph st) [graphRoot (graph st)])
-                                        0
-                                        (results st)
-                                        [] ]
+    (Task (CNode nid) _ fp) : _ -> [ TG.State rgraph nid (results st) fp ]
+    []                          -> [ TG.State rgraph 0   (results st) [] ]
     _                           -> []
   | otherwise = []
+ where rgraph = reachableGraph (graph st) [graphRoot (graph st)]
 
 -- Print the current state of the interpreter according to the given options.
 printState :: IOptions -> State -> IO ()
@@ -232,6 +225,8 @@ execIProg opts (IProg _ _ _ ifuns) f = do
             (withGraph opts1 > 2)
             (withGraph opts1 > 1))
   let allfuns = ifuns ++ standardFuncs
+  unless (arityOf f allfuns == 0) $
+    error $ "Main function '" ++ f ++ "' has non-zero arity!"
   (opts2,states) <- runWith opts1 (initState allfuns g ni) []
   unless (null pdfmain) $ do
     -- Concatenate all step PDFs into on PDF:
@@ -241,6 +236,11 @@ execIProg opts (IProg _ _ _ ifuns) f = do
     system $ unwords $ "/bin/rm -f" : pdffiles
     putStrLn $ "PDFs of all steps written to '" ++ pdfmain ++ "'."
   return states
+ where
+  checkMainFunc ifs f = do
+    let IFunction _ ar _ _ _ = funcOf f ifs
+    unless (ar == 0) $ error $ "Function '" ++ f ++ "' has non-zero arity!"
+    
 
 runWith :: IOptions -> State -> [TG.State] -> IO (IOptions, [TG.State])
 runWith opts st states
@@ -556,6 +556,10 @@ funcOf :: String -> [IFunction] -> IFunction
 funcOf fn [] = error $ "Function '" ++ fn ++ "' not found!"
 funcOf fn (fd@(IFunction (_,f,_) _ _ _ _) : funs) =
    if fn==f then fd else funcOf fn funs
+
+-- Returns the arity of a given function name.
+arityOf :: String -> [IFunction] -> Int
+arityOf fn prog = let IFunction _ ar _ _ _ = funcOf fn prog in ar
 
 -- Returns the body of a given function name.
 bodyOf :: String -> [IFunction] -> IFuncBody

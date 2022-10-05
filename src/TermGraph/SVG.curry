@@ -78,14 +78,14 @@ main = do
 
 processArgs :: [String] -> (FilePath, FilePath, (FilePath -> XmlExp -> IO ()))
 processArgs args =
-                  let dims = read <$> (args !? 3)
-                  in (args !! 0,
-                    if length args > 1
-                      then args !! 1
-                      else "icurrySVG",
-                    if args !? 2 == (Just "-tree")
-                      then (xmlGraphs2Svgs False (treeSvg 10 dims))
-                      else (xmlGraphs2Svgs False (graphSvg dims)))
+  let dims = read <$> (args !? 3)
+  in (args !! 0,
+      if length args > 1
+        then args !! 1
+        else "icurrySVG",
+      if args !? 2 == (Just "-tree")
+        then (xmlGraphs2Svgs False (treeSvg 10 dims))
+        else (xmlGraphs2Svgs False (graphSvg dims)))
 
 
 type DrawMode = (Graph, [ChoiceMapping], NodeID) -> XmlExp
@@ -114,7 +114,8 @@ writeGraphSvgs file index (svg:svgs) = do
 -- Calculate a color map for all shared nodes (i.e. nodes that are children
 -- of multiple nodes)
 -- Note that the root node is always already visited.
-sharingColorMap :: Graph -> [NodeID] -> [(NodeID, String)] -> Int -> [(NodeID, String)]
+sharingColorMap :: Graph -> [NodeID] -> [(NodeID, String)] -> Int
+                -> [(NodeID, String)]
 sharingColorMap [] _ cmap _ = cmap
 sharingColorMap (node:ns) visChld cmap cInd =
   uncurry3 (sharingColorMap ns)
@@ -202,12 +203,15 @@ nodeFromXml labelNID (XElem nodetype _ attrs)
   | otherwise          = error "could not parse node"
  where
   label = readStrElem attrs "label" ++
-        if labelNID then " (" ++ (readStrElem attrs "id") ++ ")"
-                    else ""
+          if labelNID then " (" ++ (readStrElem attrs "id") ++ ")"
+                      else ""
+
   childrenXml :: [XmlExp]
   childrenXml = ((elemsOf . (fromMaybe (error "Error in nodeFromXml")) . find ((== "children") . tagOf)) attrs)
+
   children    :: [NodeID]
-  children    = map (read . textOfXmlExp) (filter ((== "nodeId") . tagOf) childrenXml)
+  children    = map (read . textOfXmlExp)
+                    (filter ((== "nodeId") . tagOf) childrenXml)
 nodeFromXml _ (XText _) = error "could not parse node"
 
 rootFromXml :: XmlExp -> NodeID
@@ -250,17 +254,18 @@ textOfXmlExp (XElem _ _ xs) = textOf xs
 -- Get a node by NodeID from a graph
 findNode :: Graph -> NodeID -> Node
 findNode graph nid =
-            let mnode = find ((== nid) . getNodeId) graph
-            in case mnode of
-                Nothing   -> error ("Invalid NodeID in graph" ++ (show nid))
-                Just node -> node
+  let mnode = find ((== nid) . getNodeId) graph
+  in case mnode of
+      Nothing   -> error ("Invalid NodeID in graph" ++ (show nid))
+      Just node -> node
 
 findDGNode :: DGGraph -> NodeID -> DGNode
 findDGNode graph nid =
-            let mnode = find ((== nid) . nodeIDDG) graph
-            in case mnode of
-                Nothing   -> error ("Invalid NodeID in DG-graph: " ++ (show nid) ++ "\n" ++ (show graph))
-                Just node -> node
+  let mnode = find ((== nid) . nodeIDDG) graph
+  in case mnode of
+       Nothing   -> error ("Invalid NodeID in DG-graph: " ++ show nid ++
+                           "\n" ++ show graph)
+       Just node -> node
 
 class GraphMetric a where
   nodeChildrenById :: [a] -> NodeID -> [NodeID]
@@ -285,7 +290,8 @@ graphWidth :: GraphMetric n => [n] -> NodeID -> Int
 graphWidth graph start = fst $ graphMetric modeWidth [] graph start
 
 -- calculate depth or width of a given graph. Also return a list of visited Nodes
-graphMetric :: GraphMetric n => (Int -> Int -> Int, Int -> Int) -> [NodeID] -> [n] -> NodeID -> (Int, [NodeID])
+graphMetric :: GraphMetric n => (Int -> Int -> Int, Int -> Int) -> [NodeID]
+            -> [n] -> NodeID -> (Int, [NodeID])
 graphMetric (aggr, incr) visited graph curr =
   let children = nodeChildrenById graph curr
   in case children of
@@ -302,32 +308,31 @@ graphMetric (aggr, incr) visited graph curr =
 
 --Construct a graph for drawing from a graph
 constructDGGraph :: Graph -> NodeID -> DGGraph
-constructDGGraph graph root = constructDGGraph' (constructPredMap graph) M.empty graph root
+constructDGGraph graph root =
+  constructDGGraph' (constructPredMap graph) M.empty graph root
 
-constructDGGraph' :: [(NodeID, [NodeID])] -> M.Map NodeID Int -> Graph -> NodeID -> DGGraph
-constructDGGraph' _    _       []           _    = []
-constructDGGraph' predMap depthMap (node:nodes) root = (newDGNode node) : (constructDGGraph' predMap newDepthMap nodes root)
-      where
-        newDepthMap = getNodeDepth predMap depthMap [] root (getNodeId node)
-        depth       = fromMaybe (error "Error in getNodeDepth") $ M.lookup (getNodeId node) newDepthMap
-        newDGNode (Node ntype nid label chld ac res) =DGNode
-                                                        ntype
-                                                        nid
-                                                        label
-                                                        chld
-                                                        ("black")
-                                                        (calcFillColor ac res)
-                                                        depth
+constructDGGraph' :: [(NodeID, [NodeID])] -> M.Map NodeID Int -> Graph
+                  -> NodeID -> DGGraph
+constructDGGraph' _       _        []           _    = []
+constructDGGraph' predMap depthMap (node:nodes) root =
+  (newDGNode node) : (constructDGGraph' predMap newDepthMap nodes root)
+ where
+  newDepthMap = getNodeDepth predMap depthMap [] root (getNodeId node)
+  depth       = fromMaybe (error "Error in getNodeDepth") $
+                  M.lookup (getNodeId node) newDepthMap
+  newDGNode (Node ntype nid label chld ac res) =
+    DGNode ntype nid label chld "black" (calcFillColor ac res) depth
 
 -- Build a Map from NodeID to the corresponding node's predecessors' nodeIDs.
 constructPredMap :: [Node] -> [(NodeID, [NodeID])]
 constructPredMap []           = []
-constructPredMap (node:nodes) = insertPreds (constructPredMap nodes) currChildren
-    where currChildren = getNodeChildren node
-          insertPreds = foldl (insertMapKey (getNodeId node))
-          insertMapKey val m key = case lookup key m of
-            Nothing   -> (key, [val]) : m
-            Just list -> (key, (val : list)) : (filter ((/= key) . fst) m)
+constructPredMap (node:nodes) =
+  insertPreds (constructPredMap nodes) currChildren
+ where currChildren = getNodeChildren node
+       insertPreds = foldl (insertMapKey (getNodeId node))
+       insertMapKey val m key = case lookup key m of
+         Nothing   -> (key, [val]) : m
+         Just list -> (key, (val : list)) : (filter ((/= key) . fst) m)
 
 
 -- calculate the depth a node needs to be drawn at:
@@ -345,12 +350,14 @@ getNodeDepth predMap depthMap visited root currNode =
                         Nothing -> newMap
                         Just mp -> M.insert
                                     currNode
-                                    (if length preds > 1 then mp + 2 else mp + 1)
+                                    (if length preds > 1 then mp + 2
+                                                         else mp + 1)
                                     newMap
             where
-              preds   = filter (/= currNode) (fromMaybe
-                                        (error "Error in getNodeDepth, couldn't find node")
-                                        (lookup currNode predMap))
+              preds   = filter (/= currNode)
+                               (fromMaybe
+                                  (error "Error in getNodeDepth, could not find node")
+                                  (lookup currNode predMap))
               maxPath = maximum (map ((flip M.lookup) newMap) preds)
               newMap  = foldr (\pr m -> getNodeDepth predMap m (currNode : visited) root pr) depthMap preds
 
@@ -358,27 +365,27 @@ getNodeDepth predMap depthMap visited root currNode =
 --Construct a linked tree for drawing from an unlinked graph
 --returns the tree and its depth
 constructDGraph :: Int -> Graph -> NodeID -> (DNode, Int)
-constructDGraph maxDepth graph root = (dGraph, 1 + maxDepth - reached)
+constructDGraph maxDepth graph root = (dGraph, min (1 + maxDepth - reached) maxDepth)
   where
     (dGraph, reached) = constructDGraph' graph (sharingColorMap graph [root] [] 0) maxDepth root
 
 constructDGraph' :: Graph -> [(NodeID,String)] -> Int -> NodeID -> (DNode, Int)
 constructDGraph' graph cmap maxDepth curr =
   (newDNode currNode, if length depths == 0 then maxDepth else minimum depths)
-    where
-      currNode = findNode graph curr
-      (children, depths) = if maxDepth <= 0
-                  then ([], [])
-                  else unzip $ map (constructDGraph' graph cmap (maxDepth - 1)) (getNodeChildren currNode)
-      nodeWidth = max 1 (sum (map width children))
-      newDNode (Node ntype nid label _ ac res) =
-                                DNode ntype
-                                      nid
-                                      label
-                                      children
-                                      (((fromMaybe "black") . (lookup nid)) cmap)
-                                      (calcFillColor ac res)
-                                      nodeWidth
+ where
+  currNode = findNode graph curr
+  (children, depths) = if maxDepth <= (-1) -- render one more level which isn't fully rendered
+              then ([], [])                -- this can show that the tree would not end there
+              else unzip $ map (constructDGraph' graph cmap (maxDepth - 1)) (getNodeChildren currNode)
+  nodeWidth = max 1 (sum (map width children))
+  newDNode (Node ntype nid label _ ac res) =
+                            DNode ntype
+                                  nid
+                                  label
+                                  children
+                                  (((fromMaybe "black") . (lookup nid)) cmap)
+                                  (calcFillColor ac res)
+                                  nodeWidth
 
 
 type Point = (Float,Float)
@@ -395,31 +402,33 @@ calcNodeWidth lbl = max ((toFloat (length lbl)) * 9) (fst nodeSize)
 
 -- Draw a svg-graph of a given graph
 graphSvg :: Maybe Dimensions -> (Graph, [ChoiceMapping], NodeID) -> XmlExp
-graphSvg dims (graph, chMap, root) = drawSvg dims (constructDGGraph graph root) root chMap
+graphSvg dims (graph, chMap, root) =
+  drawSvg dims (constructDGGraph graph root) root chMap
 
 -- Draw a svg of a given draw-Graph
 drawSvg :: Maybe Dimensions -> DGGraph -> NodeID -> [ChoiceMapping] -> XmlExp
 drawSvg dims drawGraph root chMap =
-              let deepestNd = filter ((==(maximum (map depthDG drawGraph))) . depthDG) drawGraph
-                  dgHeight  = toFloat $ depthDG (head deepestNd) +
-                                if length (concatMap childrenDG deepestNd) > 0
-                                  then 2
-                                  else 1
-                  dgWidth   = toFloat (graphWidth drawGraph root)
-                  calcX     = dgWidth * 140
-                  calcY     = max (dgHeight * 80) 400.0
-                  dimX      = fromMaybe (max calcX calcY) (fst <$> dims)
-                  dimY      = fromMaybe dimX (snd <$> dims)
-              in XElem "svg" [("viewbox", "0 0 " ++ show dimX ++ " " ++ show dimY),
-                           ("xmlns", "http://www.w3.org/2000/svg")]
-                           (fst (graphSvgRek
-                              (dimY / dgHeight)
-                              (dimX / dgWidth)
-                              0
-                              root
-                              drawGraph
-                              chMap
-                              []))
+  let deepestNd = filter ((==(maximum (map depthDG drawGraph))) . depthDG)
+                         drawGraph
+      dgHeight  = toFloat $ depthDG (head deepestNd) +
+                    if length (concatMap childrenDG deepestNd) > 0
+                      then 2
+                      else 1
+      dgWidth   = toFloat (graphWidth drawGraph root)
+      calcX     = dgWidth * 140
+      calcY     = max (dgHeight * 80) 400.0
+      dimX      = fromMaybe (max calcX calcY) (fst <$> dims)
+      dimY      = fromMaybe dimX (snd <$> dims)
+  in XElem "svg" [("viewbox", "0 0 " ++ show dimX ++ " " ++ show dimY),
+                  ("xmlns", "http://www.w3.org/2000/svg")]
+               (fst (graphSvgRek
+                  (dimY / dgHeight)
+                  (dimX / dgWidth)
+                  0
+                  root
+                  drawGraph
+                  chMap
+                  []))
 
 graphSvgRek :: Float -> Float -> Float -> NodeID -> DGGraph -> [ChoiceMapping]
                 -> [(NodeID, Point)] -> ([XmlExp], [(NodeID, Point)])
@@ -509,49 +518,49 @@ absMax x y = if (abs x) > (abs y) then x else y
 -- Draw a svg-tree of a given graph
 treeSvg :: Int -> Maybe Dimensions -> (Graph, [ChoiceMapping], NodeID) -> XmlExp
 treeSvg maxDepth dims (graph, chMap, root) =
-              let (drawGraph, depth) = constructDGraph maxDepth graph root
-                  calcX      = toFloat ((width drawGraph) * 140)
-                  calcY      = max (toFloat depth * 80) 400.0
-                  dimX       = fromMaybe (max calcX calcY) (fst <$> dims)
-                  dimY       = fromMaybe dimX (snd <$> dims)
-              in XElem "svg" [("viewbox", "0 0 " ++ show dimX ++ " " ++ show dimY),
-                           ("xmlns", "http://www.w3.org/2000/svg")]
-                           (treeSvgRek
-                              0
-                              (dimY / (toFloat depth))
-                              (dimX / (toFloat $ width drawGraph))
-                              0
-                              drawGraph
-                              chMap)
+  let (drawGraph, depth) = constructDGraph maxDepth graph root
+      calcX      = toFloat ((width drawGraph) * 140)
+      calcY      = max (toFloat depth * 80) 400.0
+      dimX       = fromMaybe (max calcX calcY) (fst <$> dims)
+      dimY       = fromMaybe dimX (snd <$> dims)
+  in XElem "svg" [("viewbox", "0 0 " ++ show dimX ++ " " ++ show dimY),
+                  ("xmlns", "http://www.w3.org/2000/svg")]
+           (treeSvgRek
+              maxDepth
+              0
+              (dimY / (toFloat depth))
+              (dimX / (toFloat $ width drawGraph))
+              0
+              drawGraph
+              chMap)
 
 
+treeSvgRek :: Int -> Int -> Float -> Float -> Float -> DNode -> [ChoiceMapping]
+           -> [XmlExp]
+treeSvgRek maxDepth level levelHeight leafWidth leftBound currNode chMap =
+  (nodeSvg currNode (posX,posY)) :
+  (childrenSvg currChldrn leftBound
+               (currChldrn !?? ((-1 +) <$> (lookup (nodeID currNode) chMap))))
+ where
+   currChldrn = children currNode
+   posX = leftBound + ((toFloat $ width currNode) * leafWidth / 2)
+   posY = ((toFloat level) + 0.5) * levelHeight
+   connectionDashes = if level >= maxDepth - 1 then "5,5" else ""
+   connectionColour = if level >= maxDepth - 1 then "darkgrey" else "black"
 
-treeSvgRek :: Int -> Float -> Float -> Float -> DNode -> [ChoiceMapping] -> [XmlExp]
-treeSvgRek   level levelHeight leafWidth leftBound currNode chMap =
-              (nodeSvg currNode (posX,posY)) :
-                (childrenSvg currChldrn leftBound (currChldrn !?? ((-1 +) <$> (lookup (nodeID currNode) chMap))))
-              where
-                currChldrn = children currNode
-                posX = leftBound + ((toFloat $ width currNode) * leafWidth / 2)
-                posY = ((toFloat level) + 0.5) * levelHeight
-                childrenSvg []     _       _          = []
-                childrenSvg (c:cs) currLeft choiceChld = (connection c currLeft ((Just c) == choiceChld)) :
-                                              (treeSvgRek
-                                                    (level + 1)
-                                                    levelHeight
-                                                    leafWidth
-                                                    currLeft
-                                                    c
-                                                    chMap) ++
-                                              (childrenSvg cs (currLeft + (toFloat $ width c) * leafWidth) choiceChld)
-                --draw a connection between the current node and the current child
-                connection c currLeft thick = (bezierSvg
-                                        (posX, posY + ((snd nodeSize) / 2))
-                                        (currLeft + (toFloat (width c)) * leafWidth / 2,
-                                          ((toFloat level) + 1.5) * levelHeight - (snd nodeSize) / 2)
-                                        (if thick
-                                          then 3
-                                          else 1))
+   childrenSvg []     _        _          = []
+   childrenSvg (c:cs) currLeft choiceChld =
+     (connection c currLeft ((Just c) == choiceChld)) :
+     (treeSvgRek maxDepth (level + 1) levelHeight leafWidth currLeft c chMap) ++
+     (childrenSvg cs (currLeft + (toFloat $ width c) * leafWidth) choiceChld)
+
+   --draw a connection between the current node and the current child
+   connection c currLeft thick =
+     dashedBezierSvg connectionDashes connectionColour
+       (posX, posY + ((snd nodeSize) / 2))
+       (currLeft + (toFloat (width c)) * leafWidth / 2,
+        ((toFloat level) + 1.5) * levelHeight - (snd nodeSize) / 2)
+       (if thick then 3 else 1)
 
 
 -- Return the given list if p is true else return the empty list
@@ -646,18 +655,24 @@ nodeTextSvg label (x,y) = XElem "text" [("x",(show x)),
                                           ("font-size","12")]
                                         [XText label]
 
+
 bezierSvg :: Point -> Point -> Int -> XmlExp
-bezierSvg from to sWidth = let bOffset = ((snd to) - (snd from)) * 0.2
+bezierSvg from to sWidth = dashedBezierSvg "" "black" from to sWidth
+
+dashedBezierSvg :: String -> String -> Point -> Point -> Int -> XmlExp
+dashedBezierSvg dashes colour from to sWidth = let bOffset = ((snd to) - (snd from)) * 0.2
                             in XElem "path"
                                   [ ( "d", unwords ["M", (svgCoord from),
                                           "C", (svgCoord (movePoint from (0, bOffset))),
                                           (svgCoord (movePoint to (0, -bOffset))),
                                           (svgCoord to)] ),
-                                    ( "stroke", "black" ),
+                                    ( "stroke", colour ),
                                     ( "stroke-width", (show sWidth) ),
-                                    ( "fill", "none" ) ]
+                                    ( "fill", "none" ),
+                                    ( "stroke-dasharray", dashes ) ]
                                   []
 
+-- draws a 180° turn Bezier curve
 bezBowSvg :: Point -> Point -> Float -> XmlExp
 bezBowSvg from to dir = let bOffset = dir * (snd nodeSize) * 0.7
                   in XElem "path"
