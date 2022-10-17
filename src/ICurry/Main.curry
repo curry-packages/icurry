@@ -31,7 +31,7 @@ import ICurry.Types
 banner :: String
 banner = unlines [bannerLine, bannerText, bannerLine]
  where
-  bannerText = "ICurry Compiler (Version of 04/10/22)"
+  bannerText = "ICurry Compiler (Version of 17/10/22)"
   bannerLine = take (length bannerText) (repeat '=')
 
 main :: IO ()

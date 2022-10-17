@@ -52,7 +52,7 @@ type ChoiceID = Int
 -- Representation of partial function or constructor calls
 -- where the number of missing arguments is provided.
 data PartCall = PartFuncCall Int | PartConsCall Int
- deriving Show
+ deriving (Show, Eq)
 
 -- A graph node is a function, constructor, choice, or free node.
 -- The latter represents unbound variables.
@@ -61,7 +61,7 @@ data Node = FuncNode   String   [NodeID]
           | PartNode   String   PartCall [NodeID]
           | ChoiceNode ChoiceID NodeID NodeID
           | FreeNode
- deriving Show
+ deriving (Show, Eq)
 
 -- The label of a node.
 nodeLabel :: Node -> String
@@ -97,7 +97,7 @@ addPartialArg pnode arg = case pnode of
 -- A graph is implemented as a list of nodes together with a maximum NodeID
 -- and a current root (only necessary for visualization).
 data Graph = Graph [(NodeID,Node)] NodeID NodeID
- deriving Show
+ deriving (Show, Eq)
 
 -- An empty graph contains only a "null" node with node id 0.
 emptyGraph :: Graph

@@ -111,14 +111,20 @@ showResults st = unlines (map (showGraphExp (graph st)) (results st))
 addResult :: NodeID -> State -> State
 addResult nid st = st { results = results st ++ [nid], currResult = Just nid }
 
-getTGState :: ICOptions -> State -> [TG.State]
-getTGState icopts st
+addTGState :: ICOptions -> State -> [TG.State] -> [TG.State]
+addTGState icopts st states
   | optTermGraph icopts = case (tasks st) of
-    (Task (CNode nid) _ fp) : _ -> [ TG.State rgraph nid (results st) fp ]
-    []                          -> [ TG.State rgraph 0   (results st) [] ]
-    _                           -> []
-  | otherwise = []
+    -- also return state when only IReturn is currently in Tasks IBlock?
+    -- or always return state and only append it in runWith if it changed
+    tsk : _ -> if (not (null states)) && ((nstate) == (last states))
+                then states
+                else states ++ [nstate]
+      where nstate = TG.State rgraph (currentNodeOfTask tsk) (results st) (fp tsk)
+    []      -> states ++ [ TG.State rgraph 0 (results st) [] ]
+  | otherwise = states
  where rgraph = reachableGraph (graph st) [graphRoot (graph st)]
+       fp (Task _ _ fingerprint) = fingerprint
+
 
 -- Print the current state of the interpreter according to the given options.
 printState :: IOptions -> State -> IO ()
@@ -240,7 +246,7 @@ execIProg opts (IProg _ _ _ ifuns) f = do
   checkMainFunc ifs f = do
     let IFunction _ ar _ _ _ = funcOf f ifs
     unless (ar == 0) $ error $ "Function '" ++ f ++ "' has non-zero arity!"
-    
+
 
 runWith :: IOptions -> State -> [TG.State] -> IO (IOptions, [TG.State])
 runWith opts st states
@@ -249,11 +255,11 @@ runWith opts st states
        return (opts, states)
   | null (tasks st)
   = do printState opts st
-       let nstates = states ++ (getTGState (icOptions opts) st)
+       let nstates = addTGState (icOptions opts) st states
        return (opts, nstates)
   | otherwise
   = do printState opts st
-       let nstates = states ++ (getTGState (icOptions opts) st)
+       let nstates = addTGState (icOptions opts) st states
        procstep <- if optVerb (icOptions opts) > 0 then askProceed opts
                                                    else return True
        if not procstep

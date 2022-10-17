@@ -22,7 +22,7 @@ data State = State  { graph       :: Graph
                     , results     :: [NodeID]
                     , fingerprint :: FingerPrint
                     }
- deriving Show
+ deriving (Show, Eq)
 
 generateTextgraph :: State -> String
 generateTextgraph = showXmlDoc . generateXmlgraph
