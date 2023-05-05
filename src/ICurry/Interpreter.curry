@@ -227,9 +227,8 @@ execIProg opts (IProg _ _ _ ifuns) f = do
                   else opts { icOptions = (icOptions opts) { optShowGraph = 0 }
                             , stepNum = 1 }
   when (withGraph opts1 > 0) $
-    viewDot (Just $ optViewPDF (icOptions opts)) 0 (graphToDot g []
-            (withGraph opts1 > 2)
-            (withGraph opts1 > 1))
+    viewDot (Just $ optViewPDF (icOptions opts)) 0
+            (graphToDot g [] (withGraph opts1 > 2) (withGraph opts1 > 1))
   let allfuns = ifuns ++ standardFuncs
   unless (arityOf f allfuns == 0) $
     error $ "Main function '" ++ f ++ "' has non-zero arity!"

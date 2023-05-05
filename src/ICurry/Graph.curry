@@ -2,7 +2,7 @@
 --- An implementation of term graphs used by the ICurry interpreter.
 ---
 --- @author Michael Hanus, Sascha Ecks
---- @version January 2022
+--- @version May 2023
 ------------------------------------------------------------------------------
 
 module ICurry.Graph
@@ -23,8 +23,7 @@ import System.Process ( system )
 --- The second argument is the step number and used to index the output files
 --- if it is positive.
 viewDot :: Maybe String -> Int -> DotGraph -> IO ()
-viewDot withviewer num =
-  view . showDotGraphWithAttrs "ordering=out;\nfontsize=10;"
+viewDot withviewer num = view . showDotGraph
  where
   view dottxt = do
     let outpdf = "ICURRYDOT" ++ (if num>0 then show num else "") ++ ".pdf"
@@ -228,7 +227,9 @@ graphToDot gr ndattrs withnids showall =
 -- If the third argument is True, node ids will be shown in the node labels.
 fullGraphToDot :: Graph -> [(NodeID,[(String,String)])] -> Bool -> DotGraph
 fullGraphToDot (Graph nodes _ _) ndattrs withnids =
-  dgraph "Graph" (concatMap toNode nodes) (concatMap toEdges nodes)
+  dgraphWithAttrs "Graph"
+    [("ordering","out"), ("fontsize","10")]
+    (concatMap toNode nodes) (concatMap toEdges nodes)
  where
   toNode (nid,n) = [Dot.Node (show nid) ([("label", ndlabel)] ++ addAttrs)]
    where
