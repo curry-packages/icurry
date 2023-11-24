@@ -39,7 +39,7 @@
         "main": "implementation_guide.tex"
     },
     "source": {
-      "git": "https://git.ps.informatik.uni-kiel.de/curry-packages/icurry.git",
+      "git": "https://github.com/curry-packages/icurry.git",
       "tag": "$version"
     }
 
