@@ -18,7 +18,7 @@ module ICurry.Compiler
 import Control.Monad         ( when )
 import Data.List             ( elemIndex, find, maximum )
 
-import FlatCurry.ElimNewtype ( elimNewtype )
+import FlatCurry.ElimNewtype ( elimNewtypeInProgWithImports )
 import FlatCurry.Files       ( readFlatCurryWithParseOptions
                              , readFlatCurryIntWithParseOptions )
 import FlatCurry.Goodies     ( allVars, consName, funcName, funcVisibility
@@ -76,7 +76,7 @@ flatCurry2ICurryWithProgsAndOptions :: ICOptions -> [Prog] -> Prog
 flatCurry2ICurryWithProgsAndOptions opts progs prog0 = do
   let impmods = progImports prog0
   impprogs <- mapM getInterface impmods
-  let prog      = elimNewtype impprogs prog0
+  let prog      = elimNewtypeInProgWithImports impprogs prog0
       datadecls = concatMap dataDeclsOf (prog : impprogs)
       ccprog    = completeProg (CaseOptions datadecls) prog
       clprog    = if optLift opts
@@ -187,11 +187,12 @@ toIBlock opts vs e root =
   evars = allVars e
 
   varDecls = case e of
-    Free fvs _       -> map IFreeDecl fvs
+    Free fvs _       -> map IFreeDecl (map fst fvs)
     Let bs   _       -> if optVarDecls opts
                           then map IVarDecl
-                                   (filter (`elem` cyclicVars) (map fst bs))
-                          else map (IVarDecl . fst) bs
+                                   (filter (`elem` cyclicVars)
+                                           (varsOfLetBind bs))
+                          else map IVarDecl (varsOfLetBind bs)
     Case _ (Var _) _ -> []
     Case _ _       _ -> if optVarDecls opts then [] else [IVarDecl caseVar]
     _                -> []
@@ -204,7 +205,7 @@ toIBlock opts vs e root =
   -- (where the cyclic variables is returned)
   varAssigns = case e of
     Let bs _ ->
-      let assigns = map (\ (v,b) -> (v, toIExpr opts b)) bs
+      let assigns = map (\ (v,_,b) -> (v, toIExpr opts b)) bs
       in (map (\ (v,be) -> IVarAssign v be) assigns,
           -- add assignments of recursive occurrences:
           recursiveAssigns assigns)

@@ -155,9 +155,9 @@ liftExp nested exp@(Let bs e)
       modify (addFun2State letfun)
       return $ Comb FuncCall cfn (map Var vs)
  | otherwise
- = do nes <- mapM (liftExp True) (map snd bs)
+ = do nes <- mapM (liftExp True) (expsOfLetBind bs)
       ne <- liftExp True e
-      return $ Let (zip (map fst bs) nes) ne
+      return $ Let (map (\ ((v,t,_),be) -> (v,t,be)) (zip bs nes)) ne
 
 liftExp nested exp@(Free vs e)
  | nested -- lift nested free declarations by creating new function
@@ -189,10 +189,11 @@ unboundVars (Lit _)       = []
 unboundVars (Comb _ _ es) = unionMap unboundVars es
 unboundVars (Or e1 e2)    = union (unboundVars e1) (unboundVars e2)
 unboundVars (Typed e _)   = unboundVars e
-unboundVars (Free vs e)   = filter (not . flip elem vs) (unboundVars e)
+unboundVars (Free vs e)   = filter (not . flip elem (map fst vs))
+                                   (unboundVars e)
 unboundVars (Let bs e) =
-  let unbounds = unionMap unboundVars $ e : map snd bs
-      bounds   = map fst bs
+  let unbounds = unionMap unboundVars $ e : expsOfLetBind bs
+      bounds   = varsOfLetBind bs
   in filter (not . flip elem bounds) unbounds
 unboundVars (Case _ e bs) =
   union (unboundVars e) (unionMap unboundVarsInBranch bs)

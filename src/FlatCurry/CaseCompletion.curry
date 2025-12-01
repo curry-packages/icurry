@@ -5,7 +5,7 @@
 --- constructor ordering of the corresponding data definitions.
 ---
 --- @author Michael Hanus
---- @version March 2021
+--- @version November 2025
 ------------------------------------------------------------------------------
 
 module FlatCurry.CaseCompletion where
@@ -55,7 +55,8 @@ completeExp _ (Lit l) = Lit l
 completeExp opts (Comb ct qn es) =
   Comb ct qn (map (completeExp opts) es)
 completeExp opts (Let bs e) =
-  Let (zip (map fst bs) (map (completeExp opts . snd) bs)) (completeExp opts e)
+  Let (map (\ (v,tv,be) -> (v, tv, completeExp opts be)) bs)
+      (completeExp opts e)
 completeExp opts (Free vs e) = Free vs (completeExp opts e)
 completeExp opts (Or e1 e2) =
   Or (completeExp opts e1) (completeExp opts e2)
@@ -98,7 +99,7 @@ allConsExp (Case _ e brs) =
   allConsBranch (Branch (LPattern _)   be) = allConsExp be
   allConsBranch (Branch (Pattern qn _) be) = union [qn] (allConsExp be)
 allConsExp (Let bs e) =
-  union (allConsExp e) (unionMap (allConsExp . snd) bs)
+  union (allConsExp e) (unionMap allConsExp (expsOfLetBind bs))
 allConsExp (Free _ e) = allConsExp e
 allConsExp (Or e1 e2) = union (allConsExp e1) (allConsExp e2)
 allConsExp (Typed e _) = allConsExp e
